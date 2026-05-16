@@ -1,0 +1,22 @@
+{
+  "id": "cancion-de-dos-por-tres",
+  "title": "Cancion de dos por tres",
+  "artist": "Charly Garcia",
+  "bpm": 122,
+  "tracks": [
+    {
+      "id": "voz",
+      "label": "Voz",
+      "file": "Voz.mp3",
+      "defaultVolume": 1
+    },
+    {
+      "id": "musica",
+      "label": "Musica",
+      "file": "Musica.mp3",
+      "defaultVolume": 1
+    }
+  ],
+  "markers": [],
+  "regions": []
+}
