@@ -4,9 +4,9 @@
   "artist": "Charly Garcia",
   "tracks": [
     {
-      "id": "Musica",
-      "label": "Musica",
-      "file": "Musica.mp3",
+      "id": "Instrumental",
+      "label": "Instrumental",
+      "file": "Instrumental.mp3",
       "defaultVolume": 1
     },
     {
