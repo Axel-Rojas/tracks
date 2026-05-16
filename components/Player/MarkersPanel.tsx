@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { X, Pencil } from 'lucide-react'
 import type { Marker, Track } from '@/lib/types'
 import { TRACK_COLORS } from '@/components/Player/MultiTrackWaveform'
 
@@ -72,7 +73,7 @@ export default function MarkersPanel({
             className="h-10 w-10 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-300 active:bg-zinc-800 touch-manipulation"
             aria-label="Cerrar panel"
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
 
@@ -159,7 +160,7 @@ export default function MarkersPanel({
                 className="h-10 w-10 flex items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-300 active:bg-zinc-800 flex-shrink-0 touch-manipulation text-base"
                 aria-label="Editar"
               >
-                ✎
+                <Pencil size={14} />
               </button>
 
               {/* Delete button */}
@@ -168,7 +169,7 @@ export default function MarkersPanel({
                 className="h-10 w-10 flex items-center justify-center rounded-lg text-zinc-500 hover:text-red-400 active:bg-zinc-800 flex-shrink-0 touch-manipulation text-base"
                 aria-label="Eliminar"
               >
-                ✕
+                <X size={14} />
               </button>
             </div>
           ))}

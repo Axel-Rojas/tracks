@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef } from 'react'
+import { Play, Pause, SkipBack, SkipForward, Loader2, Music, Drum, Repeat, Plus } from 'lucide-react'
 import type { Marker, Region, Track } from '@/lib/types'
 import type { EngineState } from '@/hooks/useAudioEngine'
 import { TRACK_COLORS } from '@/components/Player/MultiTrackWaveform'
@@ -78,10 +79,10 @@ function SkipButton({
       onPointerUp={onPointerUp}
       onPointerLeave={onPointerLeave}
       disabled={disabled}
-      className="h-11 w-11 flex items-center justify-center rounded-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 disabled:opacity-40 transition-colors touch-manipulation text-zinc-300 text-sm select-none"
+      className="h-11 w-11 flex items-center justify-center rounded-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 disabled:opacity-40 transition-colors touch-manipulation text-zinc-300 select-none"
       aria-label={label}
     >
-      {label}
+      {dir === -1 ? <SkipBack size={16} /> : <SkipForward size={16} />}
     </button>
   )
 }
@@ -139,7 +140,7 @@ export default function TransportBar({
       <div className="flex items-center justify-center gap-2 flex-wrap">
         {/* Skip back */}
         <SkipButton
-          label="«5"
+          label="Retroceder 5s"
           delta={-5}
           dir={-1}
           onSkip={onSkip}
@@ -159,7 +160,7 @@ export default function TransportBar({
           aria-label="Claqueta (4 tiempos)"
           title="Tap: count-in de 4 tiempos al BPM"
         >
-          {countingIn ? countInBeat : '♩'}
+          {countingIn ? countInBeat : <Music size={16} />}
         </button>
 
         {/* Metronome toggle + volume */}
@@ -175,7 +176,7 @@ export default function TransportBar({
             aria-label="Metrónomo"
             title="Metrónomo continuo"
           >
-            𝅘𝅥𝅮
+            <Drum size={16} />
           </button>
           {metronomeOn && (
             <input
@@ -201,12 +202,12 @@ export default function TransportBar({
           className="h-14 w-14 flex items-center justify-center rounded-full bg-green-500 hover:bg-green-400 active:bg-green-600 disabled:opacity-40 transition-colors touch-manipulation text-black text-2xl select-none"
           aria-label={isPlaying ? 'Pausar' : 'Reproducir'}
         >
-          {isLoading ? '…' : isPlaying ? '⏸' : '▶'}
+          {isLoading ? <Loader2 size={24} className="animate-spin" /> : isPlaying ? <Pause size={24} /> : <Play size={24} />}
         </button>
 
         {/* Skip forward */}
         <SkipButton
-          label="5»"
+          label="Avanzar 5s"
           delta={5}
           dir={1}
           onSkip={onSkip}
@@ -231,7 +232,7 @@ export default function TransportBar({
                 : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
             }`}
           >
-            {activeRegionId === r.id ? '⟳ ' : ''}{r.label}
+            {activeRegionId === r.id && <Repeat size={12} className="mr-1" />}{r.label}
           </button>
         ))}
 
@@ -250,7 +251,7 @@ export default function TransportBar({
                 background: `${color}15`,
               }}
             >
-              + {track.label}
+              <Plus size={12} className="mr-0.5" />{track.label}
             </button>
           )
         })}

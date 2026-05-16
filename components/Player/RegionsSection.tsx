@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { ChevronDown, ChevronRight, Pencil, ArrowLeft, Repeat } from 'lucide-react'
 import type { Region, Track } from '@/lib/types'
 import { TRACK_COLORS } from '@/components/Player/MultiTrackWaveform'
 
@@ -78,7 +79,7 @@ function TimeInput({
           className="h-10 px-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-400 touch-manipulation transition-colors"
           title="Usar posición actual"
         >
-          ⟵ actual
+          <ArrowLeft size={12} className="inline" /> actual
         </button>
       </div>
     </div>
@@ -132,7 +133,7 @@ export default function RegionsSection({
           <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest flex-1 text-left">
             Regiones{allRegions.length > 0 ? ` (${allRegions.length})` : ''}
           </span>
-          <span className="text-zinc-600 text-sm">{isOpen ? '▾' : '▸'}</span>
+          <span className="text-zinc-600">{isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
         </button>
 
         {isOpen && (
@@ -170,7 +171,7 @@ export default function RegionsSection({
                     >
                       <span className="opacity-60 text-[10px] tabular-nums">{fmt(r.start)}–{fmt(r.end)}</span>
                       <span>{r.label}</span>
-                      <span className="opacity-50">⟳</span>
+                      <Repeat size={10} className="opacity-50" />
                     </button>
 
                     {r.isLocal && (
@@ -188,7 +189,7 @@ export default function RegionsSection({
                         className="h-9 w-9 flex items-center justify-center rounded-full text-zinc-600 hover:text-zinc-300 active:bg-zinc-800 touch-manipulation transition-colors text-sm"
                         aria-label="Editar región"
                       >
-                        ✎
+                        <Pencil size={12} />
                       </button>
                     )}
                   </div>

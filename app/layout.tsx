@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Práctica Piano",
-  description: "App para practicar covers musicales",
+  title: "Tracks",
+  description: "-",
 };
 
 export const viewport: Viewport = {

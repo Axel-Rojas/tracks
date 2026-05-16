@@ -17,8 +17,8 @@ export default async function HomePage() {
   return (
     <main className="min-h-screen bg-zinc-900">
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-white mb-1">Práctica</h1>
-        <p className="text-zinc-500 text-sm mb-6">Elige una canción para practicar</p>
+        <h1 className="text-3xl font-bold text-white mb-1">Tracks</h1>
+        <p className="text-zinc-500 text-sm mb-6">Elegí una canción para practicar</p>
 
         {error ? (
           <p className="text-red-400 bg-red-950 rounded-xl p-4 text-sm">{error}</p>

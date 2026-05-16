@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { X, ArrowLeft } from 'lucide-react'
 import type { SongIndex } from '@/lib/types'
 
 interface Props {
@@ -38,7 +39,7 @@ export default function SongSidebar({ songs, currentId, isOpen, onClose }: Props
             className="h-7 w-7 flex items-center justify-center rounded text-zinc-500 hover:text-zinc-300"
             aria-label="Cerrar sidebar"
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
 
@@ -48,7 +49,7 @@ export default function SongSidebar({ songs, currentId, isOpen, onClose }: Props
           onClick={onClose}
           className="flex items-center gap-2 px-3 py-2.5 border-b border-zinc-800 hover:bg-zinc-800 active:bg-zinc-700 touch-manipulation transition-colors"
         >
-          <span className="text-xs text-zinc-400">←</span>
+          <ArrowLeft size={14} className="text-zinc-400" />
           <span className="text-sm font-medium text-zinc-300">Todas las canciones</span>
         </Link>
 

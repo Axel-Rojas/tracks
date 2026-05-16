@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { ChevronDown, ChevronRight, Pencil } from 'lucide-react'
 import type { Marker, Track } from '@/lib/types'
 import { TRACK_COLORS } from '@/components/Player/MultiTrackWaveform'
 
@@ -78,7 +79,7 @@ export default function MarkersSection({
           <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest flex-1 text-left">
             Marcadores{totalCount > 0 ? ` (${totalCount})` : ''}
           </span>
-          <span className="text-zinc-600 text-sm">{isOpen ? '▾' : '▸'}</span>
+          <span className="text-zinc-600">{isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
         </button>
 
         {/* Marker chips */}
@@ -123,7 +124,7 @@ export default function MarkersSection({
                       className="h-9 w-9 flex items-center justify-center rounded-full text-zinc-600 hover:text-zinc-300 active:bg-zinc-800 touch-manipulation transition-colors text-sm"
                       aria-label="Editar marcador"
                     >
-                      ✎
+                      <Pencil size={12} />
                     </button>
                   )}
                 </div>

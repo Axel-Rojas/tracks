@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { Search } from 'lucide-react'
 import type { SongIndex } from '@/lib/types'
 import SongCard from './SongCard'
 
@@ -36,9 +37,7 @@ export default function SongListClient({ songs }: { songs: SongIndex[] }) {
       {/* Search + sort toolbar */}
       <div className="flex gap-2 items-center">
         <div className="relative flex-1">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none">
-            🔍
-          </span>
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" size={16} />
           <input
             type="search"
             placeholder="Buscar canción o artista…"

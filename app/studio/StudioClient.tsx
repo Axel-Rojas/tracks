@@ -1,6 +1,7 @@
 'use client'
 
 import { useId, useRef, useState } from 'react'
+import { X, ArrowLeft } from 'lucide-react'
 import type { Marker, Region, Track } from '@/lib/types'
 import Link from 'next/link'
 
@@ -191,8 +192,8 @@ export default function StudioClient() {
   return (
     <main className="min-h-screen bg-zinc-900 px-4 py-8 max-w-2xl mx-auto">
       <div className="flex items-center gap-3 mb-8">
-        <Link href="/" className="text-zinc-500 hover:text-zinc-300 text-sm">
-          ← Volver
+        <Link href="/" className="text-zinc-500 hover:text-zinc-300 text-sm flex items-center gap-1">
+          <ArrowLeft size={14} /> Volver
         </Link>
         <h1 className="text-2xl font-bold text-white">Studio</h1>
         <span className="text-xs bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded-full font-mono">
@@ -309,7 +310,7 @@ export default function StudioClient() {
                     className="text-zinc-500 hover:text-red-400 text-lg leading-none flex-shrink-0"
                     aria-label="Eliminar pista"
                   >
-                    ✕
+                    <X size={14} />
                   </button>
                 </div>
               ))}
@@ -336,7 +337,7 @@ export default function StudioClient() {
                 onClick={() => { setChordsFile(null); if (chordsInputRef.current) chordsInputRef.current.value = '' }}
                 className="text-zinc-500 hover:text-red-400 text-lg"
               >
-                ✕
+                <X size={14} />
               </button>
             </div>
           ) : (
@@ -383,7 +384,7 @@ export default function StudioClient() {
                 onClick={() => removeMarker(m._key)}
                 className="text-zinc-500 hover:text-red-400 text-lg"
               >
-                ✕
+                <X size={14} />
               </button>
             </div>
           ))}
@@ -438,7 +439,7 @@ export default function StudioClient() {
                   onClick={() => removeRegion(r._key)}
                   className="text-zinc-500 hover:text-red-400 text-lg ml-auto"
                 >
-                  ✕
+                  <X size={14} />
                 </button>
               </div>
               {/* Color swatches */}

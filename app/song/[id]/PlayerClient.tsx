@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Menu } from 'lucide-react'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { usePlayerState } from '@/hooks/usePlayerState'
 import MultiTrackWaveform from '@/components/Player/MultiTrackWaveform'
@@ -288,7 +289,7 @@ export default function PlayerClient({ meta, songs }: Props) {
             className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-zinc-800 text-zinc-400 touch-manipulation flex-shrink-0"
             aria-label="Canciones"
           >
-            ☰
+            <Menu size={18} />
           </button>
 
           <div className="flex-1 min-w-0">

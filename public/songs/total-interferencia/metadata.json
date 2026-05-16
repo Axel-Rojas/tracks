@@ -4,15 +4,15 @@
   "artist": "Charly Garcia",
   "tracks": [
     {
-      "id": "musica",
-      "label": "musica",
-      "file": "musica.mp3",
+      "id": "Musica",
+      "label": "Musica",
+      "file": "Musica.mp3",
       "defaultVolume": 1
     },
     {
-      "id": "vocals",
-      "label": "vocals",
-      "file": "vocals.mp3",
+      "id": "Voz",
+      "label": "Voz",
+      "file": "Voz.mp3",
       "defaultVolume": 1
     }
   ],

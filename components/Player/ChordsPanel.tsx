@@ -1,5 +1,6 @@
 'use client'
 
+import { X } from 'lucide-react'
 import { rawUrl } from '@/lib/songs'
 
 interface Props {
@@ -24,7 +25,7 @@ export default function ChordsPanel({ songId, chordsFile, onClose }: Props) {
             className="h-10 w-10 flex items-center justify-center rounded-full hover:bg-zinc-700 text-zinc-400 text-xl touch-manipulation"
             aria-label="Cerrar"
           >
-            ✕
+            <X size={18} />
           </button>
         </div>
         <iframe
