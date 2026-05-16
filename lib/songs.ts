@@ -1,17 +1,14 @@
-// Songs live in public/songs/ — served locally by Next.js at /songs/<path>
-// Server Components need an absolute URL; the browser can use a relative one.
+// Browser: relative URL (served by Next.js from public/)
+// Client components use rawUrl() for asset paths and fetchJson() for data.
 export function rawUrl(path: string): string {
-  const base =
-    typeof window === 'undefined'
-      ? process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : `http://localhost:${process.env.PORT ?? 3000}`
-      : ''
-  return `${base}/${path}`
+  return `/${path}`
 }
 
+/**
+ * Fetch JSON from a relative URL (client-side).
+ */
 export async function fetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(rawUrl(path))
+  const res = await fetch(`/${path}`)
   if (!res.ok) throw new Error(`Failed to fetch ${path}: ${res.status}`)
   return res.json() as Promise<T>
 }

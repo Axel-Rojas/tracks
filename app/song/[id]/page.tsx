@@ -1,4 +1,4 @@
-import { fetchJson } from '@/lib/songs'
+import { readJsonFromPublic } from '@/lib/songs.server'
 import type { SongIndex, SongMeta } from '@/lib/types'
 import PlayerClient from './PlayerClient'
 
@@ -13,8 +13,8 @@ export default async function SongPage({ params }: Props) {
   let error: string | null = null
 
   const [metaResult, songs] = await Promise.allSettled([
-    fetchJson<SongMeta>(`songs/${id}/metadata.json`),
-    fetchJson<SongIndex[]>('songs.json'),
+    readJsonFromPublic<SongMeta>(`songs/${id}/metadata.json`),
+    readJsonFromPublic<SongIndex[]>('songs.json'),
   ])
 
   if (metaResult.status === 'fulfilled') {

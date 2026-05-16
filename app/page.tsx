@@ -1,4 +1,4 @@
-import { fetchJson } from '@/lib/songs'
+import { readJsonFromPublic } from '@/lib/songs.server'
 import type { SongIndex } from '@/lib/types'
 import SongListClient from '@/components/SongList/SongListClient'
 
@@ -9,7 +9,7 @@ export default async function HomePage() {
   let error: string | null = null
 
   try {
-    songs = await fetchJson<SongIndex[]>('songs.json')
+    songs = await readJsonFromPublic<SongIndex[]>('songs.json')
   } catch {
     error = 'No se pudo cargar la lista de canciones.'
   }
