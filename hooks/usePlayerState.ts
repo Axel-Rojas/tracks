@@ -1,21 +1,21 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Marker } from '@/lib/types'
+import type { Marker, Region } from '@/lib/types'
 
 interface PersistedState {
   volumes: Record<string, number>
   activeRegionId: string | null
-  lastPosition: number
   localMarkers: Marker[]
+  localRegions: Region[]
   localBpm: number | null
 }
 
 const defaultState = (): PersistedState => ({
   volumes: {},
   activeRegionId: null,
-  lastPosition: 0,
   localMarkers: [],
+  localRegions: [],
   localBpm: null,
 })
 

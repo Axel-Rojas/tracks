@@ -20,6 +20,7 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
   const startedAtRef = useRef(0)
 
   const [state, setState] = useState<EngineState>('idle')
+  const stateRef = useRef<EngineState>('idle')
   const [volumes, setVolumes] = useState<number[]>([])
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -67,6 +68,7 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
       .then((buffers) => {
         buffersRef.current = buffers
         setDuration(Math.max(...buffers.map((b) => b.duration)))
+        stateRef.current = 'ready'
         setState('ready')
       })
       .catch(() => setState('idle'))
@@ -112,6 +114,7 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
     if (ctx.state === 'suspended') {
       ctx.resume().then(() => {
         createAndStartSources(offsetRef.current)
+        stateRef.current = 'playing'
         setState('playing')
         rafRef.current = requestAnimationFrame(tick)
       })
@@ -119,6 +122,7 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
     }
 
     createAndStartSources(offsetRef.current)
+    stateRef.current = 'playing'
     setState('playing')
     rafRef.current = requestAnimationFrame(tick)
   }, [createAndStartSources, tick])
@@ -129,6 +133,7 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
     offsetRef.current = offsetRef.current + (ctx.currentTime - startedAtRef.current)
     ctx.suspend()
     stopTick()
+    stateRef.current = 'paused'
     setState('paused')
   }, [])
 
@@ -137,11 +142,10 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
       const ctx = ctxRef.current
       if (!ctx) return
 
-      const wasPlaying = ctx.state === 'running'
       offsetRef.current = time
       setCurrentTime(time)
 
-      if (wasPlaying) {
+      if (stateRef.current === 'playing') {
         createAndStartSources(time)
       }
     },

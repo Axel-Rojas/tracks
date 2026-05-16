@@ -16,6 +16,8 @@ export interface Region {
   label: string
   start: number
   end: number
+  color?: string
+  trackIndex?: number
 }
 
 export interface SongMeta {

@@ -9,7 +9,8 @@ import SongSidebar from '@/components/Player/SongSidebar'
 import ChordsPanel from '@/components/Player/ChordsPanel'
 import BpmTapModal from '@/components/Player/BpmTapModal'
 import MarkersSection from '@/components/Player/MarkersSection'
-import type { Marker, SongIndex, SongMeta } from '@/lib/types'
+import RegionsSection from '@/components/Player/RegionsSection'
+import type { Marker, Region, SongIndex, SongMeta } from '@/lib/types'
 
 interface Props {
   meta: SongMeta
@@ -47,6 +48,7 @@ export default function PlayerClient({ meta, songs }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [activeRegionId, setActiveRegionId] = useState<string | null>(null)
   const [localMarkers, setLocalMarkers] = useState<Marker[]>([])
+  const [localRegions, setLocalRegions] = useState<Region[]>([])
   const [countingIn, setCountingIn] = useState(false)
   const [countInBeat, setCountInBeat] = useState(4)
   const [localBpm, setLocalBpm] = useState<number | null>(null)
@@ -54,8 +56,10 @@ export default function PlayerClient({ meta, songs }: Props) {
   const [metronomeOn, setMetronomeOn] = useState(false)
   const [metronomeVolume, setMetronomeVolume] = useState(0.7)
   const [markersSectionOpen, setMarkersSectionOpen] = useState(false)
+  const [regionsSectionOpen, setRegionsSectionOpen] = useState(false)
 
   const markerCountRef = useRef(0)
+  const regionCountRef = useRef(0)
   const metronomeRef = useRef<{ nextBeatTime: number; timerId: ReturnType<typeof setTimeout> | null }>({
     nextBeatTime: 0,
     timerId: null,
@@ -64,7 +68,6 @@ export default function PlayerClient({ meta, songs }: Props) {
   // Hidratar desde localStorage
   useEffect(() => {
     if (engine.state !== 'ready') return
-    if (persisted.lastPosition > 0) engine.seek(persisted.lastPosition)
     Object.entries(persisted.volumes).forEach(([trackId, vol]) => {
       const idx = meta.tracks.findIndex((t) => t.id === trackId)
       if (idx >= 0) engine.setVolume(idx, vol)
@@ -74,16 +77,13 @@ export default function PlayerClient({ meta, songs }: Props) {
       setLocalMarkers(persisted.localMarkers)
       markerCountRef.current = persisted.localMarkers.length
     }
+    if (persisted.localRegions.length > 0) {
+      setLocalRegions(persisted.localRegions)
+      regionCountRef.current = persisted.localRegions.length
+    }
     if (persisted.localBpm) setLocalBpm(persisted.localBpm)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine.state])
-
-  // Persistir posición mientras suena
-  useEffect(() => {
-    if (engine.state !== 'playing') return
-    const t = setInterval(() => save({ lastPosition: engine.currentTime }), 2000)
-    return () => clearInterval(t)
-  }, [engine.state, engine.currentTime, save])
 
   const handleVolumeChange = useCallback(
     (index: number, value: number) => {
@@ -111,6 +111,7 @@ export default function PlayerClient({ meta, songs }: Props) {
   )
 
   const allMarkers = [...meta.markers, ...localMarkers]
+  const allRegions = [...meta.regions, ...localRegions]
 
   const handleSkipToMarker = useCallback(
     (dir: -1 | 1) => {
@@ -150,6 +151,43 @@ export default function PlayerClient({ meta, songs }: Props) {
     setLocalMarkers(updated)
     save({ localMarkers: updated })
   }, [localMarkers, save])
+
+  const handleAddRegion = useCallback(() => {
+    regionCountRef.current += 1
+    const region: Region = {
+      id: `local-region-${regionCountRef.current}`,
+      label: `R${regionCountRef.current}`,
+      start: Math.round(engine.currentTime * 10) / 10,
+      end: Math.round(Math.min(engine.currentTime + 30, engine.duration) * 10) / 10,
+      color: 'rgba(74,222,128,0.20)',
+    }
+    const updated = [...localRegions, region]
+    setLocalRegions(updated)
+    save({ localRegions: updated })
+    setRegionsSectionOpen(true)
+  }, [engine.currentTime, engine.duration, localRegions, save])
+
+  const handleEditRegion = useCallback((index: number, patch: Partial<Region>) => {
+    const updated = localRegions.map((r, i) => i === index ? { ...r, ...patch } : r)
+    setLocalRegions(updated)
+    save({ localRegions: updated })
+  }, [localRegions, save])
+
+  const handleRegionUpdate = useCallback((id: string, start: number, end: number) => {
+    const index = localRegions.findIndex((r) => r.id === id)
+    if (index < 0) return
+    const updated = localRegions.map((r, i) => i === index ? { ...r, start, end } : r)
+    setLocalRegions(updated)
+    save({ localRegions: updated })
+  }, [localRegions, save])
+
+  const handleDeleteRegion = useCallback((index: number) => {
+    const deleted = localRegions[index]
+    const updated = localRegions.filter((_, i) => i !== index)
+    setLocalRegions(updated)
+    save({ localRegions: updated })
+    if (activeRegionId === deleted?.id) handleSetActiveRegion(null)
+  }, [localRegions, save, activeRegionId, handleSetActiveRegion])
 
   const handleConfirmBpm = useCallback((bpm: number) => {
     setLocalBpm(bpm)
@@ -285,7 +323,7 @@ export default function PlayerClient({ meta, songs }: Props) {
             songId={meta.id}
             tracks={meta.tracks}
             markers={allMarkers}
-            regions={meta.regions}
+            regions={allRegions}
             activeRegionId={activeRegionId}
             currentTime={engine.currentTime}
             duration={engine.duration}
@@ -294,8 +332,25 @@ export default function PlayerClient({ meta, songs }: Props) {
             onVolumeChange={handleVolumeChange}
             onRegionLoop={handleRegionLoop}
             onSetActiveRegion={handleSetActiveRegion}
+            onRegionUpdate={handleRegionUpdate}
           />
         </div>
+
+        {/* Regions section */}
+        <RegionsSection
+          isOpen={regionsSectionOpen}
+          onToggle={() => setRegionsSectionOpen((v) => !v)}
+          metaRegions={meta.regions}
+          localRegions={localRegions}
+          tracks={meta.tracks}
+          activeRegionId={activeRegionId}
+          currentTime={engine.currentTime}
+          onSeek={engine.seek}
+          onSetActiveRegion={handleSetActiveRegion}
+          onAddRegion={handleAddRegion}
+          onEditRegion={handleEditRegion}
+          onDeleteRegion={handleDeleteRegion}
+        />
 
         {/* Markers section */}
         <MarkersSection
@@ -316,7 +371,7 @@ export default function PlayerClient({ meta, songs }: Props) {
             currentTime={engine.currentTime}
             duration={engine.duration}
             markers={allMarkers}
-            regions={meta.regions}
+            regions={allRegions}
             activeRegionId={activeRegionId}
             countingIn={countingIn}
             countInBeat={countInBeat}

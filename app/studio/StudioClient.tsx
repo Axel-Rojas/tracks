@@ -21,6 +21,15 @@ interface RegionEntry extends Region {
 let _seq = 0
 const nextKey = () => ++_seq
 
+const REGION_PRESETS = [
+  { solid: '#4ade80', rgba: 'rgba(74,222,128,0.20)' },
+  { solid: '#60a5fa', rgba: 'rgba(96,165,250,0.20)' },
+  { solid: '#fbbf24', rgba: 'rgba(251,191,36,0.20)' },
+  { solid: '#f472b6', rgba: 'rgba(244,114,182,0.20)' },
+  { solid: '#a78bfa', rgba: 'rgba(167,139,250,0.20)' },
+  { solid: '#f87171', rgba: 'rgba(248,113,113,0.20)' },
+]
+
 function slugify(s: string) {
   return s
     .toLowerCase()
@@ -118,7 +127,7 @@ export default function StudioClient() {
     const k = nextKey()
     setRegions((prev) => [
       ...prev,
-      { _key: k, id: `region-${k}`, label: '', start: 0, end: 30 },
+      { _key: k, id: `region-${k}`, label: '', start: 0, end: 30, color: REGION_PRESETS[0].rgba },
     ])
   }
 
@@ -154,7 +163,7 @@ export default function StudioClient() {
       ...(bpm ? { bpm: parseInt(bpm, 10) } : {}),
       tracks: metaTracks,
       markers: markers.map(({ time, label }) => ({ time, label })),
-      regions: regions.map(({ id: rid, label, start, end }) => ({ id: rid, label, start, end })),
+      regions: regions.map(({ id: rid, label, start, end, color, trackIndex }) => ({ id: rid, label, start, end, ...(color ? { color } : {}), ...(trackIndex !== undefined && trackIndex !== 0 ? { trackIndex } : {}) })),
       ...(chordsFile ? { chordsFile: chordsFile.name } : {}),
     }
 
@@ -392,44 +401,64 @@ export default function StudioClient() {
             <p className="text-xs text-zinc-600">Sin regiones. Las regiones permiten hacer loop de una sección.</p>
           )}
           {regions.map((r) => (
-            <div key={r._key} className="flex items-center gap-2 flex-wrap">
-              <input
-                className="w-28 bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
-                placeholder="ID (slug)"
-                value={r.id}
-                onChange={(e) => updateRegion(r._key, { id: e.target.value })}
-              />
-              <input
-                className="flex-1 min-w-[80px] bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
-                placeholder="Coro"
-                value={r.label}
-                onChange={(e) => updateRegion(r._key, { label: e.target.value })}
-              />
-              <input
-                type="number"
-                className="w-20 bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
-                placeholder="inicio"
-                value={r.start}
-                min={0}
-                step={0.5}
-                onChange={(e) => updateRegion(r._key, { start: parseFloat(e.target.value) || 0 })}
-              />
-              <input
-                type="number"
-                className="w-20 bg-zinc-800 border border-zinc-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
-                placeholder="fin"
-                value={r.end}
-                min={0}
-                step={0.5}
-                onChange={(e) => updateRegion(r._key, { end: parseFloat(e.target.value) || 0 })}
-              />
-              <button
-                type="button"
-                onClick={() => removeRegion(r._key)}
-                className="text-zinc-500 hover:text-red-400 text-lg"
-              >
-                ✕
-              </button>
+            <div key={r._key} className="flex flex-col gap-2 bg-zinc-800 rounded-lg px-3 py-2.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  className="w-28 bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
+                  placeholder="ID (slug)"
+                  value={r.id}
+                  onChange={(e) => updateRegion(r._key, { id: e.target.value })}
+                />
+                <input
+                  className="flex-1 min-w-[80px] bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
+                  placeholder="Coro"
+                  value={r.label}
+                  onChange={(e) => updateRegion(r._key, { label: e.target.value })}
+                />
+                <input
+                  type="number"
+                  className="w-20 bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
+                  placeholder="inicio"
+                  value={r.start}
+                  min={0}
+                  step={0.5}
+                  onChange={(e) => updateRegion(r._key, { start: parseFloat(e.target.value) || 0 })}
+                />
+                <input
+                  type="number"
+                  className="w-20 bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-green-500"
+                  placeholder="fin"
+                  value={r.end}
+                  min={0}
+                  step={0.5}
+                  onChange={(e) => updateRegion(r._key, { end: parseFloat(e.target.value) || 0 })}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeRegion(r._key)}
+                  className="text-zinc-500 hover:text-red-400 text-lg ml-auto"
+                >
+                  ✕
+                </button>
+              </div>
+              {/* Color swatches */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-zinc-500 mr-1">Color:</span>
+                {REGION_PRESETS.map((p) => (
+                  <button
+                    key={p.rgba}
+                    type="button"
+                    onClick={() => updateRegion(r._key, { color: p.rgba })}
+                    aria-label={p.solid}
+                    className="w-5 h-5 rounded-full transition-transform hover:scale-110"
+                    style={{
+                      background: p.solid,
+                      outline: r.color === p.rgba ? `2px solid ${p.solid}` : '2px solid transparent',
+                      outlineOffset: '2px',
+                    }}
+                  />
+                ))}
+              </div>
             </div>
           ))}
         </section>

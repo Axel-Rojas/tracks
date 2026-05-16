@@ -1,0 +1,21 @@
+{
+  "id": "cadaver-exquisito",
+  "title": "Cadaver exquisito",
+  "artist": "Fito paez",
+  "tracks": [
+    {
+      "id": "musica",
+      "label": "Musica",
+      "file": "Musica.mp3",
+      "defaultVolume": 1
+    },
+    {
+      "id": "voz",
+      "label": "Voz",
+      "file": "Voz.mp3",
+      "defaultVolume": 1
+    }
+  ],
+  "markers": [],
+  "regions": []
+}

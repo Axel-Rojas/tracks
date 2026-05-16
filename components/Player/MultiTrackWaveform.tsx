@@ -27,12 +27,17 @@ interface Props {
   onVolumeChange: (i: number, v: number) => void
   onRegionLoop: (start: number) => void
   onSetActiveRegion: (id: string | null) => void
+  onRegionUpdate?: (id: string, start: number, end: number) => void
 }
 
 function markersForTrack(markers: Marker[], trackIndex: number) {
   return markers.filter(
     (m) => m.trackIndex === trackIndex || (m.trackIndex === undefined && trackIndex === 0)
   )
+}
+
+function regionsForTrack(regions: Region[], trackIndex: number) {
+  return regions.filter((r) => (r.trackIndex ?? 0) === trackIndex)
 }
 
 export default function MultiTrackWaveform({
@@ -48,6 +53,7 @@ export default function MultiTrackWaveform({
   onVolumeChange,
   onRegionLoop,
   onSetActiveRegion,
+  onRegionUpdate,
 }: Props) {
   const containerRefs = useRef<(HTMLDivElement | null)[]>([])
   const wsInstances = useRef<WaveSurfer[]>([])
@@ -60,6 +66,8 @@ export default function MultiTrackWaveform({
   activeRegionRef.current = activeRegionId
   const regionsDataRef = useRef(regions)
   regionsDataRef.current = regions
+  const onRegionUpdateRef = useRef(onRegionUpdate)
+  onRegionUpdateRef.current = onRegionUpdate
 
   useEffect(() => {
     wsInstances.current.forEach((ws) => ws.destroy())
@@ -107,20 +115,19 @@ export default function MultiTrackWaveform({
           })
         })
 
-        // Loop regions only on track 0
-        if (isMain) {
-          regionsDataRef.current.forEach((r) => {
-            regionsPlugin.addRegion({
-              id: r.id,
-              start: r.start,
-              end: r.end,
-              content: r.label,
-              color: 'rgba(74,222,128,0.15)',
-              drag: false,
-              resize: false,
-            })
+        // Loop regions — only those assigned to this track
+        regionsForTrack(regionsDataRef.current, i).forEach((r) => {
+          const isLocal = r.id.startsWith('local-')
+          regionsPlugin.addRegion({
+            id: r.id,
+            start: r.start,
+            end: r.end,
+            content: r.label,
+            color: r.color ?? 'rgba(74,222,128,0.15)',
+            drag: isLocal,
+            resize: isLocal,
           })
-        }
+        })
       })
 
       if (isMain) {
@@ -132,19 +139,23 @@ export default function MultiTrackWaveform({
           })
           setTimeout(() => { interactingRef.current = false }, 100)
         })
-
-        regionsPlugin.on('region-clicked', (region, e) => {
-          e.stopPropagation()
-          if (regionsDataRef.current.some((r) => r.id === region.id)) {
-            onSetActiveRegion(activeRegionRef.current === region.id ? null : region.id)
-            onSeek(region.start)
-          }
-        })
-
-        regionsPlugin.on('region-out', (region) => {
-          if (region.id === activeRegionRef.current) onRegionLoop(region.start)
-        })
       }
+
+      regionsPlugin.on('region-clicked', (region, e) => {
+        e.stopPropagation()
+        if (regionsDataRef.current.some((r) => r.id === region.id)) {
+          onSetActiveRegion(activeRegionRef.current === region.id ? null : region.id)
+          onSeek(region.start)
+        }
+      })
+
+      regionsPlugin.on('region-out', (region) => {
+        if (region.id === activeRegionRef.current) onRegionLoop(region.start)
+      })
+
+      regionsPlugin.on('region-updated', (region) => {
+        onRegionUpdateRef.current?.(region.id, region.start, region.end)
+      })
 
       wsInstances.current[i] = ws
     })
@@ -155,6 +166,29 @@ export default function MultiTrackWaveform({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [songId])
+
+  // Sync loop regions per track when regions change
+  useEffect(() => {
+    tracks.forEach((_, i) => {
+      const plugin = regionsPluginsRef.current[i]
+      if (!plugin || !wsReadyRef.current[i]) return
+      plugin.getRegions().forEach((r) => {
+        if (!r.id.startsWith('m::')) r.remove()
+      })
+      regionsForTrack(regions, i).forEach((r) => {
+        const isLocal = r.id.startsWith('local-')
+        plugin.addRegion({
+          id: r.id,
+          start: r.start,
+          end: r.end,
+          content: r.label,
+          color: r.color ?? 'rgba(74,222,128,0.15)',
+          drag: isLocal,
+          resize: isLocal,
+        })
+      })
+    })
+  }, [regions, tracks])
 
   // Sync markers to each track's plugin when markers change
   useEffect(() => {
