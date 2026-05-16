@@ -241,7 +241,7 @@ export default function TransportBar({
           return (
             <button
               key={track.id}
-              onClick={() => onAddMarker(i)}
+              onClick={() => onAddMarker?.(i)}
               disabled={isDisabled}
               className="h-9 px-3 rounded-full text-xs font-medium touch-manipulation disabled:opacity-40 transition-opacity border"
               style={{
