@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Menu } from 'lucide-react'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { usePlayerState } from '@/hooks/usePlayerState'
