@@ -1,0 +1,21 @@
+{
+  "id": "cactus",
+  "title": "Cactus",
+  "artist": "Gustavo Cerati",
+  "tracks": [
+    {
+      "id": "instrumental",
+      "label": "Instrumental",
+      "file": "Instrumental.mp3",
+      "defaultVolume": 1
+    },
+    {
+      "id": "voz",
+      "label": "Voz",
+      "file": "Voz.mp3",
+      "defaultVolume": 1
+    }
+  ],
+  "markers": [],
+  "regions": []
+}
