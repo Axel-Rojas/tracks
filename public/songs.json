@@ -1,5 +1,20 @@
 [
   {
+    "id": "vienna",
+    "title": "Vienna",
+    "artist": "Billy Joel"
+  },
+  {
+    "id": "blackbird",
+    "title": "Blackbird",
+    "artist": "Beatles"
+  },
+  {
+    "id": "cuando-no-estas",
+    "title": "Cuando no estas",
+    "artist": "Andres Calamaro"
+  },
+  {
     "id": "total-interferencia",
     "title": "Total Interferencia",
     "artist": "Charly Garcia"

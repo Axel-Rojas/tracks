@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile, mkdir, readFile } from 'fs/promises'
+import { writeFile, rm, readFile, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
+import { spawn } from 'child_process'
 import path from 'path'
+import os from 'os'
+import crypto from 'crypto'
 import type { SongIndex, SongMeta } from '@/lib/types'
 
 const SONGS_DIR = path.join(process.cwd(), 'public', 'songs')
@@ -13,6 +16,12 @@ function devOnly() {
   }
   return null
 }
+
+type SSEEvent =
+  | { type: 'log'; text: string }
+  | { type: 'progress'; pct: number; text: string }
+  | { type: 'done'; id: string }
+  | { type: 'error'; message: string }
 
 export async function POST(req: NextRequest) {
   const guard = devOnly()
@@ -26,86 +35,133 @@ export async function POST(req: NextRequest) {
   }
 
   const id = (formData.get('id') as string | null)?.trim()
-  const metaRaw = formData.get('metadata') as string | null
+  const title = (formData.get('title') as string | null)?.trim()
+  const artist = (formData.get('artist') as string | null)?.trim()
+  const bpm = (formData.get('bpm') as string | null)?.trim()
+  const songFile = formData.get('song') as File | null
+  const chordsFile = formData.get('chords') as File | null
 
-  if (!id || !metaRaw) {
-    return NextResponse.json({ error: 'Missing id or metadata' }, { status: 400 })
+  if (!id || !title || !artist || !songFile) {
+    return NextResponse.json({ error: 'Faltan campos requeridos (id, title, artist, song)' }, { status: 400 })
   }
 
-  // Validate slug
   if (!/^[a-z0-9-]+$/.test(id)) {
     return NextResponse.json(
-      { error: 'ID must be lowercase letters, numbers, and hyphens only' },
+      { error: 'ID debe contener solo minúsculas, números y guiones' },
       { status: 400 }
     )
   }
 
-  let meta: SongMeta
+  // Read files into memory before starting the stream
+  let songBuffer: Buffer
+  let chordsBuffer: Buffer | null = null
+  let chordsFileName: string | null = null
+
   try {
-    meta = JSON.parse(metaRaw) as SongMeta
+    songBuffer = Buffer.from(await songFile.arrayBuffer())
+    if (chordsFile instanceof File && chordsFile.size > 0) {
+      chordsBuffer = Buffer.from(await chordsFile.arrayBuffer())
+      chordsFileName = chordsFile.name
+    }
   } catch {
-    return NextResponse.json({ error: 'Invalid metadata JSON' }, { status: 400 })
+    return NextResponse.json({ error: 'Error leyendo los archivos' }, { status: 500 })
   }
 
-  const songDir = path.join(SONGS_DIR, id)
-  await mkdir(songDir, { recursive: true })
+  const scriptArgs = [
+    path.join(process.cwd(), 'scripts', 'add_song.py'),
+    '--title', title,
+    '--artist', artist,
+    '--id', id,
+    '--overwrite',
+    ...(bpm ? ['--bpm', bpm] : []),
+  ]
 
-  // Write audio track files
-  const trackFiles = formData.getAll('tracks') as File[]
-  for (const file of trackFiles) {
-    if (!(file instanceof File) || file.size === 0) continue
-    const buf = Buffer.from(await file.arrayBuffer())
-    await writeFile(path.join(songDir, file.name), buf)
-  }
+  const encoder = new TextEncoder()
 
-  // Write chords PDF
-  const chordsFile = formData.get('chords') as File | null
-  if (chordsFile instanceof File && chordsFile.size > 0) {
-    const buf = Buffer.from(await chordsFile.arrayBuffer())
-    await writeFile(path.join(songDir, chordsFile.name), buf)
-    meta.chordsFile = chordsFile.name
-  }
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (ev: SSEEvent) => {
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`))
+        } catch { /* client disconnected */ }
+      }
 
-  // Write metadata.json
-  await writeFile(
-    path.join(songDir, 'metadata.json'),
-    JSON.stringify(meta, null, 2),
-    'utf-8'
-  )
+      // Save song to temp file
+      const tmpPath = path.join(os.tmpdir(), `demucs-${crypto.randomUUID()}.mp3`)
+      try {
+        await writeFile(tmpPath, songBuffer)
+      } catch {
+        send({ type: 'error', message: 'Error guardando archivo temporal' })
+        controller.close()
+        return
+      }
 
-  // Update songs.json
-  let songs: SongIndex[] = []
-  if (existsSync(SONGS_JSON)) {
-    try {
-      songs = JSON.parse(await readFile(SONGS_JSON, 'utf-8')) as SongIndex[]
-    } catch { /* start fresh if corrupt */ }
-  }
+      send({ type: 'log', text: 'Archivo guardado. Iniciando procesamiento...' })
 
-  const entry: SongIndex = { id: meta.id, title: meta.title, artist: meta.artist }
-  const existing = songs.findIndex((s) => s.id === id)
-  if (existing >= 0) {
-    songs[existing] = entry
-  } else {
-    songs.push(entry)
-  }
+      const proc = spawn('python', [...scriptArgs, tmpPath], { cwd: process.cwd() })
 
-  await writeFile(SONGS_JSON, JSON.stringify(songs, null, 2), 'utf-8')
+      const handleChunk = (data: Buffer) => {
+        // tqdm uses \r for in-place updates — split on both \r and \n
+        const parts = data.toString('utf-8').split(/[\r\n]/).filter((s) => s.trim())
+        for (const part of parts) {
+          const pctMatch = part.match(/^\s*(\d+)%\|/)
+          if (pctMatch) {
+            send({ type: 'progress', pct: parseInt(pctMatch[1]), text: part.trim() })
+          } else {
+            send({ type: 'log', text: part.trim() })
+          }
+        }
+      }
 
-  return NextResponse.json({ ok: true, id })
+      proc.stdout.on('data', (d: Buffer) => { process.stdout.write(d); handleChunk(d) })
+      proc.stderr.on('data', (d: Buffer) => { process.stderr.write(d); handleChunk(d) })
+
+      proc.on('close', async (code) => {
+        await rm(tmpPath, { force: true })
+
+        if (code !== 0) {
+          send({ type: 'error', message: 'Demucs falló. Revisá la terminal para más detalles.' })
+          controller.close()
+          return
+        }
+
+        // Handle optional chords PDF
+        if (chordsBuffer && chordsFileName) {
+          try {
+            const songDir = path.join(SONGS_DIR, id)
+            await mkdir(songDir, { recursive: true })
+            await writeFile(path.join(songDir, chordsFileName), chordsBuffer)
+            const metaPath = path.join(songDir, 'metadata.json')
+            const meta = JSON.parse(await readFile(metaPath, 'utf-8')) as SongMeta
+            meta.chordsFile = chordsFileName
+            await writeFile(metaPath, JSON.stringify(meta, null, 2))
+          } catch { /* non-fatal */ }
+        }
+
+        send({ type: 'done', id })
+        controller.close()
+      })
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  })
 }
 
-// List existing local songs
 export async function GET() {
   const guard = devOnly()
   if (guard) return guard
 
-  if (!existsSync(SONGS_JSON)) {
-    return NextResponse.json([])
-  }
+  if (!existsSync(SONGS_JSON)) return NextResponse.json([])
 
   try {
     const raw = await readFile(SONGS_JSON, 'utf-8')
-    return NextResponse.json(JSON.parse(raw))
+    return NextResponse.json(JSON.parse(raw) as SongIndex[])
   } catch {
     return NextResponse.json([])
   }
