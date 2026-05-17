@@ -28,5 +28,10 @@
     "id": "something",
     "title": "Something",
     "artist": "Beatles"
+  },
+  {
+    "id": "giros",
+    "title": "Giros",
+    "artist": "Fito Paez"
   }
 ]

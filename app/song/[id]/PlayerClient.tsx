@@ -109,8 +109,8 @@ export default function PlayerClient({ meta, songs }: Props) {
     [engine]
   )
 
-  const allMarkers = [...meta.markers, ...localMarkers]
-  const allRegions = [...meta.regions, ...localRegions]
+  const allMarkers = useMemo(() => [...meta.markers, ...localMarkers], [meta.markers, localMarkers])
+  const allRegions = useMemo(() => [...meta.regions, ...localRegions], [meta.regions, localRegions])
 
   const loopingRef = useRef(false)
   useEffect(() => {
