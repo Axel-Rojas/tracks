@@ -102,8 +102,6 @@ export default function PlayerClient({ meta, songs }: Props) {
     [save]
   )
 
-  const handleRegionLoop = useCallback((start: number) => engine.seek(start), [engine])
-
   const handleSkip = useCallback(
     (delta: number) => {
       engine.seek(Math.max(0, Math.min(engine.currentTime + delta, engine.duration)))
@@ -113,6 +111,19 @@ export default function PlayerClient({ meta, songs }: Props) {
 
   const allMarkers = [...meta.markers, ...localMarkers]
   const allRegions = [...meta.regions, ...localRegions]
+
+  const loopingRef = useRef(false)
+  useEffect(() => {
+    if (engine.state !== 'playing') return
+    if (!activeRegionId) return
+    const region = allRegions.find((r) => r.id === activeRegionId)
+    if (!region) return
+    if (!loopingRef.current && engine.currentTime >= region.end) {
+      loopingRef.current = true
+      engine.seek(region.start)
+      requestAnimationFrame(() => { loopingRef.current = false })
+    }
+  }, [engine.currentTime, engine.state, activeRegionId, allRegions, engine])
 
   const handleSkipToMarker = useCallback(
     (dir: -1 | 1) => {
@@ -331,7 +342,6 @@ export default function PlayerClient({ meta, songs }: Props) {
             volumes={engine.volumes}
             onSeek={engine.seek}
             onVolumeChange={handleVolumeChange}
-            onRegionLoop={handleRegionLoop}
             onSetActiveRegion={handleSetActiveRegion}
             onRegionUpdate={handleRegionUpdate}
           />

@@ -25,7 +25,6 @@ interface Props {
   volumes: number[]
   onSeek: (t: number) => void
   onVolumeChange: (i: number, v: number) => void
-  onRegionLoop: (start: number) => void
   onSetActiveRegion: (id: string | null) => void
   onRegionUpdate?: (id: string, start: number, end: number) => void
 }
@@ -51,7 +50,6 @@ export default function MultiTrackWaveform({
   volumes,
   onSeek,
   onVolumeChange,
-  onRegionLoop,
   onSetActiveRegion,
   onRegionUpdate,
 }: Props) {
@@ -147,10 +145,6 @@ export default function MultiTrackWaveform({
           onSetActiveRegion(activeRegionRef.current === region.id ? null : region.id)
           onSeek(region.start)
         }
-      })
-
-      regionsPlugin.on('region-out', (region) => {
-        if (region.id === activeRegionRef.current) onRegionLoop(region.start)
       })
 
       regionsPlugin.on('region-updated', (region) => {

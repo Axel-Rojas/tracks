@@ -23,5 +23,10 @@
     "id": "best-friend",
     "title": "Best Friend",
     "artist": "Rex Orange County"
+  },
+  {
+    "id": "something",
+    "title": "Something",
+    "artist": "Beatles"
   }
 ]
