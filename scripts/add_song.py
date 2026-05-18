@@ -4,12 +4,13 @@ Agrega una canción al proyecto separando sus pistas con Demucs.
 
 Uso:
     python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista"
+    python scripts/add_song.py --youtube-url "https://youtu.be/..." --title "Nombre" --artist "Artista"
     python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista" --bpm 120
     python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista" --id mi-id
     python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista" --overwrite
 
 Requiere:
-    pip install demucs
+    pip install demucs yt-dlp
     ffmpeg instalado en el PATH (winget install ffmpeg)
 """
 
@@ -85,24 +86,64 @@ def check_demucs():
         sys.exit(1)
 
 
+def download_from_youtube(url: str, out_dir: Path) -> Path:
+    """Descarga audio de YouTube como WAV a 44100 Hz usando yt-dlp."""
+    try:
+        import yt_dlp
+    except ImportError:
+        print("ERROR: yt-dlp no está instalado.")
+        print("  Instalalo con: pip install yt-dlp")
+        sys.exit(1)
+
+    ffmpeg = find_ffmpeg()
+    out_template = str(out_dir / "%(title)s.%(ext)s")
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "outtmpl": out_template,
+        "ffmpeg_location": str(Path(ffmpeg).parent),
+        "postprocessors": [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "wav",
+            "preferredquality": "0",
+        }],
+        "postprocessor_args": {"FFmpegExtractAudio": ["-ar", "44100", "-ac", "2"]},
+    }
+    print("\n>> Descargando audio desde YouTube...")
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ret = ydl.download([url])
+    if ret != 0:
+        print("ERROR: yt-dlp falló al descargar el audio.")
+        sys.exit(1)
+
+    wavs = list(out_dir.glob("*.wav"))
+    if not wavs:
+        print(f"ERROR: No se encontró el WAV descargado en {out_dir}")
+        sys.exit(1)
+    return wavs[0]
+
+
 def run_demucs(input_file: Path, out_dir: Path) -> Path:
     ffmpeg = find_ffmpeg()
     # Inyectar el directorio de ffmpeg en PATH para que Demucs también lo encuentre
     ffmpeg_dir = str(Path(ffmpeg).parent)
     env = {**os.environ, "PATH": ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")}
 
-    # torchaudio en Python 3.13+ no puede cargar MP3 sin torchcodec.
-    # Convertir a WAV con ffmpeg evita el problema.
-    wav_file = out_dir / (input_file.stem + ".wav")
-    print("\n>> Convirtiendo a WAV...")
-    conv = subprocess.run(
-        [ffmpeg, "-i", str(input_file), "-ar", "44100", "-ac", "2", str(wav_file), "-y"],
-        capture_output=True,
-        text=True,
-    )
-    if conv.returncode != 0:
-        print(f"ERROR: ffmpeg fallo al convertir el archivo.\n{conv.stderr}")
-        sys.exit(1)
+    if input_file.suffix.lower() == ".wav":
+        # Ya es WAV (ej: descargado desde YouTube) — Demucs lo puede leer directamente
+        wav_file = input_file
+    else:
+        # torchaudio en Python 3.13+ no puede cargar MP3 sin torchcodec.
+        # Convertir a WAV con ffmpeg evita el problema.
+        wav_file = out_dir / (input_file.stem + ".wav")
+        print("\n>> Convirtiendo a WAV...")
+        conv = subprocess.run(
+            [ffmpeg, "-i", str(input_file), "-ar", "44100", "-ac", "2", str(wav_file), "-y"],
+            capture_output=True,
+            text=True,
+        )
+        if conv.returncode != 0:
+            print(f"ERROR: ffmpeg fallo al convertir el archivo.\n{conv.stderr}")
+            sys.exit(1)
 
     print("\n>> Separando pistas con Demucs (puede tardar varios minutos)...")
     result = subprocess.run(
@@ -175,7 +216,8 @@ def write_metadata(song_dir: Path, song_id: str, title: str, artist: str, bpm: i
 
 def main():
     parser = argparse.ArgumentParser(description="Agrega una canción separando sus pistas con Demucs.")
-    parser.add_argument("input", help="Archivo MP3 de entrada")
+    parser.add_argument("input", nargs="?", default=None, help="Archivo de audio de entrada (MP3 o WAV)")
+    parser.add_argument("--youtube-url", default=None, help="URL de YouTube para descargar el audio")
     parser.add_argument("--title", required=True, help="Título de la canción")
     parser.add_argument("--artist", required=True, help="Artista")
     parser.add_argument("--bpm", type=int, default=None, help="BPM (opcional)")
@@ -183,9 +225,8 @@ def main():
     parser.add_argument("--overwrite", action="store_true", help="Sobreescribir si el ID ya existe")
     args = parser.parse_args()
 
-    input_file = Path(args.input).resolve()
-    if not input_file.exists():
-        print(f"ERROR: No se encontró el archivo: {input_file}")
+    if not args.input and not args.youtube_url:
+        print("ERROR: Debés proveer un archivo de entrada o --youtube-url.")
         sys.exit(1)
 
     song_id = args.song_id or slugify(args.title)
@@ -202,6 +243,15 @@ def main():
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
+
+        if args.youtube_url:
+            input_file = download_from_youtube(args.youtube_url, tmp_path)
+        else:
+            input_file = Path(args.input).resolve()
+            if not input_file.exists():
+                print(f"ERROR: No se encontró el archivo: {input_file}")
+                sys.exit(1)
+
         stem_dir = run_demucs(input_file, tmp_path)
 
         vocals_src = stem_dir / "vocals.mp3"

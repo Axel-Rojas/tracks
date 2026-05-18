@@ -1,5 +1,10 @@
 [
   {
+    "id": "tres-agujas",
+    "title": "Tres Agujas",
+    "artist": "Luis Alberto Spinetta"
+  },
+  {
     "id": "cactus",
     "title": "Cactus",
     "artist": "Gustavo Cerati"

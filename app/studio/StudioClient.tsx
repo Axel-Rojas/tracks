@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { X, ArrowLeft, Music } from 'lucide-react'
+import { X, ArrowLeft, Music, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 
 function slugify(s: string) {
@@ -38,9 +38,10 @@ function parseETA(text: string): string | null {
 }
 
 function inferPhase(text: string): string | null {
+  if (text.includes('Descargando audio desde YouTube')) return 'Descargando desde YouTube...'
   if (text.includes('Convirtiendo')) return 'Convirtiendo a WAV...'
   if (text.includes('Separando pistas') || text.includes('Separating track')) return 'Separando pistas...'
-  if (text.includes('Downloading') || text.includes('Descargando')) return 'Descargando modelo Demucs...'
+  if (text.includes('Downloading') || text.includes('Descargando modelo')) return 'Descargando modelo Demucs...'
   if (text.includes('Iniciando')) return 'Iniciando...'
   return null
 }
@@ -55,6 +56,8 @@ export default function StudioClient() {
   const [id, setId] = useState('')
   const [songFile, setSongFile] = useState<File | null>(null)
   const [chordsFile, setChordsFile] = useState<File | null>(null)
+  const [youtubeMode, setYoutubeMode] = useState(false)
+  const [youtubeUrl, setYoutubeUrl] = useState('')
 
   const [saving, setSaving] = useState(false)
   const [phase, setPhase] = useState('')
@@ -69,13 +72,21 @@ export default function StudioClient() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!id || !title || !artist || !songFile) {
-      setResult({ ok: false, message: 'Completá título, artista y seleccioná el MP3.' })
+    if (!id || !title || !artist) {
+      setResult({ ok: false, message: 'Completá título, artista e ID.' })
+      return
+    }
+    if (youtubeMode && !youtubeUrl.trim()) {
+      setResult({ ok: false, message: 'Pegá una URL de YouTube.' })
+      return
+    }
+    if (!youtubeMode && !songFile) {
+      setResult({ ok: false, message: 'Seleccioná un archivo MP3.' })
       return
     }
 
     setSaving(true)
-    setPhase('Subiendo archivo...')
+    setPhase(youtubeMode ? 'Conectando con YouTube...' : 'Subiendo archivo...')
     setProgress(null)
     setLastLog('')
     setResult(null)
@@ -85,7 +96,11 @@ export default function StudioClient() {
     fd.append('title', title)
     fd.append('artist', artist)
     if (bpm) fd.append('bpm', bpm)
-    fd.append('song', songFile, songFile.name)
+    if (youtubeMode) {
+      fd.append('youtubeUrl', youtubeUrl.trim())
+    } else {
+      fd.append('song', songFile!, songFile!.name)
+    }
     if (chordsFile) fd.append('chords', chordsFile, chordsFile.name)
 
     let res: Response
@@ -214,44 +229,76 @@ export default function StudioClient() {
           </div>
         </section>
 
-        {/* Song MP3 */}
+        {/* Song */}
         <section className="flex flex-col gap-3 p-4 bg-zinc-800/50 rounded-xl border border-zinc-700">
-          <h2 className="text-sm font-semibold text-zinc-300">Canción</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-zinc-300">Canción</h2>
+            {/* Mode toggle */}
+            <div className="flex rounded-lg overflow-hidden border border-zinc-700 text-xs">
+              <button
+                type="button"
+                onClick={() => setYoutubeMode(false)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${!youtubeMode ? 'bg-zinc-600 text-white' : 'text-zinc-400 hover:text-zinc-300'}`}
+              >
+                <Music size={12} /> MP3
+              </button>
+              <button
+                type="button"
+                onClick={() => setYoutubeMode(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${youtubeMode ? 'bg-red-700 text-white' : 'text-zinc-400 hover:text-zinc-300'}`}
+              >
+                <ExternalLink size={12} /> YouTube
+              </button>
+            </div>
+          </div>
           <p className="text-xs text-zinc-500">
             Demucs va a separar la pista en{' '}
             <span className="text-zinc-400">Voz</span> e{' '}
             <span className="text-zinc-400">Instrumental</span> automáticamente.
           </p>
-          <input
-            ref={songInputRef}
-            type="file"
-            accept="audio/mpeg,.mp3"
-            className="hidden"
-            onChange={(e) => setSongFile(e.target.files?.[0] ?? null)}
-          />
-          {songFile ? (
-            <div className="flex items-center gap-2 bg-zinc-800 rounded-lg px-3 py-2.5">
-              <Music size={14} className="text-green-400 flex-shrink-0" />
-              <span className="text-sm text-green-400 flex-1 truncate">{songFile.name}</span>
-              <span className="text-xs text-zinc-500 flex-shrink-0">
-                {(songFile.size / 1024 / 1024).toFixed(1)} MB
-              </span>
-              <button
-                type="button"
-                onClick={() => { setSongFile(null); if (songInputRef.current) songInputRef.current.value = '' }}
-                className="text-zinc-500 hover:text-red-400 flex-shrink-0"
-              >
-                <X size={14} />
-              </button>
-            </div>
+
+          {youtubeMode ? (
+            <input
+              type="url"
+              className={inputCls}
+              placeholder="https://www.youtube.com/watch?v=..."
+              value={youtubeUrl}
+              onChange={(e) => setYoutubeUrl(e.target.value)}
+            />
           ) : (
-            <button
-              type="button"
-              onClick={() => songInputRef.current?.click()}
-              className="border-2 border-dashed border-zinc-600 rounded-lg py-6 text-sm text-zinc-500 hover:border-zinc-500 hover:text-zinc-400 transition-colors"
-            >
-              Seleccionar MP3...
-            </button>
+            <>
+              <input
+                ref={songInputRef}
+                type="file"
+                accept="audio/mpeg,.mp3"
+                className="hidden"
+                onChange={(e) => setSongFile(e.target.files?.[0] ?? null)}
+              />
+              {songFile ? (
+                <div className="flex items-center gap-2 bg-zinc-800 rounded-lg px-3 py-2.5">
+                  <Music size={14} className="text-green-400 flex-shrink-0" />
+                  <span className="text-sm text-green-400 flex-1 truncate">{songFile.name}</span>
+                  <span className="text-xs text-zinc-500 flex-shrink-0">
+                    {(songFile.size / 1024 / 1024).toFixed(1)} MB
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { setSongFile(null); if (songInputRef.current) songInputRef.current.value = '' }}
+                    className="text-zinc-500 hover:text-red-400 flex-shrink-0"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => songInputRef.current?.click()}
+                  className="border-2 border-dashed border-zinc-600 rounded-lg py-6 text-sm text-zinc-500 hover:border-zinc-500 hover:text-zinc-400 transition-colors"
+                >
+                  Seleccionar MP3...
+                </button>
+              )}
+            </>
           )}
         </section>
 

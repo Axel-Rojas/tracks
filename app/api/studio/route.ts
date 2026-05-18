@@ -40,9 +40,14 @@ export async function POST(req: NextRequest) {
   const bpm = (formData.get('bpm') as string | null)?.trim()
   const songFile = formData.get('song') as File | null
   const chordsFile = formData.get('chords') as File | null
+  const youtubeUrl = (formData.get('youtubeUrl') as string | null)?.trim() || null
 
-  if (!id || !title || !artist || !songFile) {
-    return NextResponse.json({ error: 'Faltan campos requeridos (id, title, artist, song)' }, { status: 400 })
+  if (!id || !title || !artist || (!songFile && !youtubeUrl)) {
+    return NextResponse.json({ error: 'Faltan campos requeridos (id, title, artist, y song o youtubeUrl)' }, { status: 400 })
+  }
+
+  if (youtubeUrl && !/^https:\/\/(www\.youtube\.com|youtu\.be)\//.test(youtubeUrl)) {
+    return NextResponse.json({ error: 'URL de YouTube inválida' }, { status: 400 })
   }
 
   if (!/^[a-z0-9-]+$/.test(id)) {
@@ -53,12 +58,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Read files into memory before starting the stream
-  let songBuffer: Buffer
+  let songBuffer: Buffer | null = null
   let chordsBuffer: Buffer | null = null
   let chordsFileName: string | null = null
 
   try {
-    songBuffer = Buffer.from(await songFile.arrayBuffer())
+    if (songFile) songBuffer = Buffer.from(await songFile.arrayBuffer())
     if (chordsFile instanceof File && chordsFile.size > 0) {
       chordsBuffer = Buffer.from(await chordsFile.arrayBuffer())
       chordsFileName = chordsFile.name
@@ -74,6 +79,7 @@ export async function POST(req: NextRequest) {
     '--id', id,
     '--overwrite',
     ...(bpm ? ['--bpm', bpm] : []),
+    ...(youtubeUrl ? ['--youtube-url', youtubeUrl] : []),
   ]
 
   const encoder = new TextEncoder()
@@ -86,19 +92,24 @@ export async function POST(req: NextRequest) {
         } catch { /* client disconnected */ }
       }
 
-      // Save song to temp file
-      const tmpPath = path.join(os.tmpdir(), `demucs-${crypto.randomUUID()}.mp3`)
-      try {
-        await writeFile(tmpPath, songBuffer)
-      } catch {
-        send({ type: 'error', message: 'Error guardando archivo temporal' })
-        controller.close()
-        return
+      let tmpPath: string | null = null
+
+      if (songBuffer) {
+        tmpPath = path.join(os.tmpdir(), `demucs-${crypto.randomUUID()}.mp3`)
+        try {
+          await writeFile(tmpPath, songBuffer)
+        } catch {
+          send({ type: 'error', message: 'Error guardando archivo temporal' })
+          controller.close()
+          return
+        }
+        send({ type: 'log', text: 'Archivo guardado. Iniciando procesamiento...' })
+      } else {
+        send({ type: 'log', text: 'Iniciando descarga desde YouTube...' })
       }
 
-      send({ type: 'log', text: 'Archivo guardado. Iniciando procesamiento...' })
-
-      const proc = spawn('python', [...scriptArgs, tmpPath], { cwd: process.cwd() })
+      const procArgs = tmpPath ? [...scriptArgs, tmpPath] : scriptArgs
+      const proc = spawn('python', procArgs, { cwd: process.cwd() })
 
       const handleChunk = (data: Buffer) => {
         // tqdm uses \r for in-place updates — split on both \r and \n
@@ -117,7 +128,7 @@ export async function POST(req: NextRequest) {
       proc.stderr.on('data', (d: Buffer) => { process.stderr.write(d); handleChunk(d) })
 
       proc.on('close', async (code) => {
-        await rm(tmpPath, { force: true })
+        if (tmpPath) await rm(tmpPath, { force: true })
 
         if (code !== 0) {
           send({ type: 'error', message: 'Demucs falló. Revisá la terminal para más detalles.' })
