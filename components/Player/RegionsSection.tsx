@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight, Pencil, ArrowLeft, Repeat } from 'lucide-react'
 import type { Region, Track } from '@/lib/types'
-import { TRACK_COLORS } from '@/components/Player/MultiTrackWaveform'
+import { TRACK_COLORS, REGION_PRESETS, DEFAULT_REGION_COLOR, solidFromRgba } from '@/lib/colors'
+import { formatTime } from '@/lib/format'
 
 interface Props {
   isOpen: boolean
@@ -29,27 +30,6 @@ interface EditState {
   trackIndex: number
 }
 
-export const REGION_PRESETS = [
-  { solid: '#4ade80', rgba: 'rgba(74,222,128,0.20)' },
-  { solid: '#60a5fa', rgba: 'rgba(96,165,250,0.20)' },
-  { solid: '#fbbf24', rgba: 'rgba(251,191,36,0.20)' },
-  { solid: '#f472b6', rgba: 'rgba(244,114,182,0.20)' },
-  { solid: '#a78bfa', rgba: 'rgba(167,139,250,0.20)' },
-  { solid: '#f87171', rgba: 'rgba(248,113,113,0.20)' },
-]
-
-export const DEFAULT_REGION_COLOR = REGION_PRESETS[0].rgba
-
-function solidFromRgba(rgba: string): string {
-  return REGION_PRESETS.find((p) => p.rgba === rgba)?.solid ?? '#4ade80'
-}
-
-function fmt(s: number) {
-  const m = Math.floor(s / 60)
-  const sec = Math.floor(s % 60)
-  return `${m}:${sec.toString().padStart(2, '0')}`
-}
-
 function TimeInput({
   label,
   value,
@@ -73,7 +53,7 @@ function TimeInput({
           onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
           className="w-16 h-10 px-2 rounded-xl bg-zinc-800 text-white text-sm text-center outline-none border border-zinc-700 focus:border-zinc-500 transition-colors"
         />
-        <span className="text-xs text-zinc-500 tabular-nums w-10">{fmt(value)}</span>
+        <span className="text-xs text-zinc-500 tabular-nums w-10">{formatTime(value)}</span>
         <button
           onClick={onCurrentTime}
           className="h-10 px-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-400 touch-manipulation transition-colors"
@@ -169,7 +149,7 @@ export default function RegionsSection({
                         boxShadow: isActive ? `0 0 0 1px ${solid}40` : 'none',
                       }}
                     >
-                      <span className="opacity-60 text-[10px] tabular-nums">{fmt(r.start)}–{fmt(r.end)}</span>
+                      <span className="opacity-60 text-[10px] tabular-nums">{formatTime(r.start)}–{formatTime(r.end)}</span>
                       <span>{r.label}</span>
                       <Repeat size={10} className="opacity-50" />
                     </button>

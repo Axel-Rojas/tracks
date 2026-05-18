@@ -1,9 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { Menu } from 'lucide-react'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { usePlayerState } from '@/hooks/usePlayerState'
+import { useMetronome } from '@/hooks/useMetronome'
+import { useRegionLoop } from '@/hooks/useRegionLoop'
+import { useMarkersCrud } from '@/hooks/useMarkersCrud'
+import { useRegionsCrud } from '@/hooks/useRegionsCrud'
 import MultiTrackWaveform from '@/components/Player/MultiTrackWaveform'
 import TransportBar from '@/components/Player/TransportBar'
 import SongSidebar from '@/components/Player/SongSidebar'
@@ -11,77 +15,94 @@ import ChordsPanel from '@/components/Player/ChordsPanel'
 import BpmTapModal from '@/components/Player/BpmTapModal'
 import MarkersSection from '@/components/Player/MarkersSection'
 import RegionsSection from '@/components/Player/RegionsSection'
-import type { Marker, Region, SongIndex, SongMeta } from '@/lib/types'
+import type { SongIndex, SongMeta } from '@/lib/types'
+import { PLAYBACK } from '@/lib/constants'
 
 interface Props {
   meta: SongMeta
   songs: SongIndex[]
 }
 
-function playCountIn(
-  ctx: AudioContext,
-  bpm: number,
-  onBeat: (beat: number) => void,
-  onDone: () => void
-) {
-  const beatDuration = 60 / bpm
-  for (let i = 0; i < 4; i++) {
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    const t = ctx.currentTime + i * beatDuration
-    osc.frequency.value = i === 0 ? 1000 : 800
-    gain.gain.setValueAtTime(0.4, t)
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06)
-    osc.start(t)
-    osc.stop(t + 0.06)
-    setTimeout(() => onBeat(4 - i), i * beatDuration * 1000)
+interface UIState {
+  chordsOpen: boolean
+  sidebarOpen: boolean
+  tapModalOpen: boolean
+  markersSectionOpen: boolean
+  regionsSectionOpen: boolean
+}
+
+type UIAction =
+  | { type: 'toggle'; key: keyof UIState }
+  | { type: 'set'; key: keyof UIState; value: boolean }
+
+function uiReducer(state: UIState, action: UIAction): UIState {
+  switch (action.type) {
+    case 'toggle': return { ...state, [action.key]: !state[action.key] }
+    case 'set': return { ...state, [action.key]: action.value }
   }
-  setTimeout(onDone, 4 * beatDuration * 1000)
+}
+
+const initialUI: UIState = {
+  chordsOpen: false,
+  sidebarOpen: false,
+  tapModalOpen: false,
+  markersSectionOpen: false,
+  regionsSectionOpen: false,
 }
 
 export default function PlayerClient({ meta, songs }: Props) {
   const engine = useAudioEngine({ songId: meta.id, tracks: meta.tracks })
   const { persisted, save } = usePlayerState(meta.id)
 
-  const [chordsOpen, setChordsOpen] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [activeRegionId, setActiveRegionId] = useState<string | null>(null)
-  const [localMarkers, setLocalMarkers] = useState<Marker[]>([])
-  const [localRegions, setLocalRegions] = useState<Region[]>([])
-  const [countingIn, setCountingIn] = useState(false)
-  const [countInBeat, setCountInBeat] = useState(4)
-  const [localBpm, setLocalBpm] = useState<number | null>(null)
-  const [tapModalOpen, setTapModalOpen] = useState(false)
-  const [metronomeOn, setMetronomeOn] = useState(false)
-  const [metronomeVolume, setMetronomeVolume] = useState(0.7)
-  const [markersSectionOpen, setMarkersSectionOpen] = useState(false)
-  const [regionsSectionOpen, setRegionsSectionOpen] = useState(false)
+  const [ui, dispatch] = useReducer(uiReducer, initialUI)
 
-  const markerCountRef = useRef(0)
-  const regionCountRef = useRef(0)
-  const metronomeRef = useRef<{ nextBeatTime: number; timerId: ReturnType<typeof setTimeout> | null }>({
-    nextBeatTime: 0,
-    timerId: null,
+  // Active region & BPM
+  const [activeRegionId, setActiveRegionId] = useState<string | null>(null)
+  const [localBpm, setLocalBpm] = useState<number | null>(null)
+  const effectiveBpm = localBpm ?? meta.bpm ?? PLAYBACK.DEFAULT_BPM
+
+  // CRUD hooks
+  const markers = useMarkersCrud({
+    initialMarkers: [],
+    getCurrentTime: () => engine.currentTime,
+    save,
   })
 
-  // Hidratar desde localStorage
+  const regions = useRegionsCrud({
+    initialRegions: [],
+    getCurrentTime: () => engine.currentTime,
+    getDuration: () => engine.duration,
+    save,
+  })
+
+  // Metronome & count-in
+  const metronome = useMetronome({
+    engineState: engine.state,
+    getContext: engine.getContext,
+    bpm: effectiveBpm,
+    releaseSources: engine.releaseSources,
+    play: engine.play,
+  })
+
+  // Computed collections
+  const allMarkers = useMemo(() => [...meta.markers, ...markers.localMarkers], [meta.markers, markers.localMarkers])
+  const allRegions = useMemo(() => [...meta.regions, ...regions.localRegions], [meta.regions, regions.localRegions])
+
+  // Region loop
+  useRegionLoop({
+    engineState: engine.state,
+    currentTime: engine.currentTime,
+    activeRegionId,
+    allRegions,
+    seek: engine.seek,
+  })
+
+  // Hydrate from localStorage
   useEffect(() => {
     if (engine.state !== 'ready') return
-    Object.entries(persisted.volumes).forEach(([trackId, vol]) => {
-      const idx = meta.tracks.findIndex((t) => t.id === trackId)
-      if (idx >= 0) engine.setVolume(idx, vol)
-    })
     setActiveRegionId(persisted.activeRegionId)
-    if (persisted.localMarkers.length > 0) {
-      setLocalMarkers(persisted.localMarkers)
-      markerCountRef.current = persisted.localMarkers.length
-    }
-    if (persisted.localRegions.length > 0) {
-      setLocalRegions(persisted.localRegions)
-      regionCountRef.current = persisted.localRegions.length
-    }
+    if (persisted.localMarkers.length > 0) markers.hydrate(persisted.localMarkers)
+    if (persisted.localRegions.length > 0) regions.hydrate(persisted.localRegions)
     if (persisted.localBpm) setLocalBpm(persisted.localBpm)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine.state])
@@ -89,9 +110,8 @@ export default function PlayerClient({ meta, songs }: Props) {
   const handleVolumeChange = useCallback(
     (index: number, value: number) => {
       engine.setVolume(index, value)
-      save({ volumes: { ...persisted.volumes, [meta.tracks[index].id]: value } })
     },
-    [engine, meta.tracks, persisted.volumes, save]
+    [engine]
   )
 
   const handleSetActiveRegion = useCallback(
@@ -109,194 +129,49 @@ export default function PlayerClient({ meta, songs }: Props) {
     [engine]
   )
 
-  const allMarkers = useMemo(() => [...meta.markers, ...localMarkers], [meta.markers, localMarkers])
-  const allRegions = useMemo(() => [...meta.regions, ...localRegions], [meta.regions, localRegions])
-
-  const loopingRef = useRef(false)
-  useEffect(() => {
-    if (engine.state !== 'playing') return
-    if (!activeRegionId) return
-    const region = allRegions.find((r) => r.id === activeRegionId)
-    if (!region) return
-    if (!loopingRef.current && engine.currentTime >= region.end) {
-      loopingRef.current = true
-      engine.seek(region.start)
-      requestAnimationFrame(() => { loopingRef.current = false })
-    }
-  }, [engine.currentTime, engine.state, activeRegionId, allRegions, engine])
-
   const handleSkipToMarker = useCallback(
     (dir: -1 | 1) => {
       const sorted = [...allMarkers].sort((a, b) => a.time - b.time)
       if (dir === -1) {
-        const prev = [...sorted].reverse().find((m) => m.time < engine.currentTime - 0.5)
+        const prev = [...sorted].reverse().find((m) => m.time < engine.currentTime - PLAYBACK.SEEK_TOLERANCE)
         if (prev) engine.seek(prev.time)
       } else {
-        const next = sorted.find((m) => m.time > engine.currentTime + 0.5)
+        const next = sorted.find((m) => m.time > engine.currentTime + PLAYBACK.SEEK_TOLERANCE)
         if (next) engine.seek(next.time)
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [engine, allMarkers]
   )
 
-  const handleAddMarker = useCallback((trackIndex: number) => {
-    markerCountRef.current += 1
-    const marker: Marker = {
-      time: Math.round(engine.currentTime * 10) / 10,
-      label: `M${markerCountRef.current}`,
-      trackIndex,
-    }
-    const updated = [...localMarkers, marker]
-    setLocalMarkers(updated)
-    save({ localMarkers: updated })
-  }, [engine.currentTime, localMarkers, save])
-
-  const handleEditMarker = useCallback((index: number, label: string, trackIndex: number | undefined) => {
-    const updated = localMarkers.map((m, i) => i === index ? { ...m, label, trackIndex } : m)
-    setLocalMarkers(updated)
-    save({ localMarkers: updated })
-  }, [localMarkers, save])
-
-  const handleDeleteMarker = useCallback((index: number) => {
-    const updated = localMarkers.filter((_, i) => i !== index)
-    setLocalMarkers(updated)
-    save({ localMarkers: updated })
-  }, [localMarkers, save])
-
   const handleAddRegion = useCallback(() => {
-    regionCountRef.current += 1
-    const region: Region = {
-      id: `local-region-${regionCountRef.current}`,
-      label: `R${regionCountRef.current}`,
-      start: Math.round(engine.currentTime * 10) / 10,
-      end: Math.round(Math.min(engine.currentTime + 30, engine.duration) * 10) / 10,
-      color: 'rgba(74,222,128,0.20)',
-    }
-    const updated = [...localRegions, region]
-    setLocalRegions(updated)
-    save({ localRegions: updated })
-    setRegionsSectionOpen(true)
-  }, [engine.currentTime, engine.duration, localRegions, save])
-
-  const handleEditRegion = useCallback((index: number, patch: Partial<Region>) => {
-    const updated = localRegions.map((r, i) => i === index ? { ...r, ...patch } : r)
-    setLocalRegions(updated)
-    save({ localRegions: updated })
-  }, [localRegions, save])
-
-  const handleRegionUpdate = useCallback((id: string, start: number, end: number) => {
-    const index = localRegions.findIndex((r) => r.id === id)
-    if (index < 0) return
-    const updated = localRegions.map((r, i) => i === index ? { ...r, start, end } : r)
-    setLocalRegions(updated)
-    save({ localRegions: updated })
-  }, [localRegions, save])
+    regions.addRegion()
+    dispatch({ type: 'set', key: 'regionsSectionOpen', value: true })
+  }, [regions])
 
   const handleDeleteRegion = useCallback((index: number) => {
-    const deleted = localRegions[index]
-    const updated = localRegions.filter((_, i) => i !== index)
-    setLocalRegions(updated)
-    save({ localRegions: updated })
-    if (activeRegionId === deleted?.id) handleSetActiveRegion(null)
-  }, [localRegions, save, activeRegionId, handleSetActiveRegion])
+    const deletedId = regions.deleteRegion(index)
+    if (activeRegionId === deletedId) handleSetActiveRegion(null)
+  }, [regions, activeRegionId, handleSetActiveRegion])
 
   const handleConfirmBpm = useCallback((bpm: number) => {
     setLocalBpm(bpm)
     save({ localBpm: bpm })
   }, [save])
 
-  const effectiveBpm = localBpm ?? meta.bpm ?? 80
-
-  // Metronome scheduling — must be after effectiveBpm
-  useEffect(() => {
-    const state = engine.state
-    const ctx = engine.getContext()
-    if (!metronomeOn || state !== 'playing' || !ctx) {
-      if (metronomeRef.current.timerId) {
-        clearTimeout(metronomeRef.current.timerId)
-        metronomeRef.current.timerId = null
-      }
-      return
-    }
-
-    const beatDuration = 60 / effectiveBpm
-    const scheduleAhead = 0.1
-    const lookahead = 25
-
-    function scheduleTick() {
-      const now = ctx!.currentTime
-      while (metronomeRef.current.nextBeatTime < now + scheduleAhead) {
-        const t = metronomeRef.current.nextBeatTime
-        if (t >= now) {
-          const osc = ctx!.createOscillator()
-          const gain = ctx!.createGain()
-          osc.connect(gain)
-          gain.connect(ctx!.destination)
-          osc.frequency.value = 800
-          gain.gain.setValueAtTime(metronomeVolume, t)
-          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08)
-          osc.start(t)
-          osc.stop(t + 0.08)
-        }
-        metronomeRef.current.nextBeatTime += beatDuration
-      }
-      metronomeRef.current.timerId = setTimeout(scheduleTick, lookahead)
-    }
-
-    metronomeRef.current.nextBeatTime = ctx.currentTime
-    scheduleTick()
-
-    return () => {
-      if (metronomeRef.current.timerId) {
-        clearTimeout(metronomeRef.current.timerId)
-        metronomeRef.current.timerId = null
-      }
-    }
-  }, [metronomeOn, engine.state, effectiveBpm, metronomeVolume]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleCountIn = useCallback(() => {
-    const ctx = engine.getContext()
-    if (!ctx || countingIn) return
-
-    // Stop any playing/suspended sources so they don't bleed when ctx resumes
-    engine.releaseSources()
-    setCountingIn(true)
-    setCountInBeat(4)
-
-    const doCountIn = () => {
-      playCountIn(
-        ctx,
-        effectiveBpm,
-        (beat) => setCountInBeat(beat),
-        () => {
-          setCountingIn(false)
-          engine.play()
-        }
-      )
-    }
-
-    if (ctx.state === 'suspended') {
-      ctx.resume().then(doCountIn)
-    } else {
-      doCountIn()
-    }
-  }, [engine, effectiveBpm, countingIn])
-
   return (
     <div className="flex h-dvh bg-zinc-900 overflow-hidden">
       <SongSidebar
         songs={songs}
         currentId={meta.id}
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        isOpen={ui.sidebarOpen}
+        onClose={() => dispatch({ type: 'set', key: 'sidebarOpen', value: false })}
       />
 
       <div className="flex flex-col flex-1 min-w-0">
         {/* Header */}
         <header className="flex items-center gap-2 px-3 py-2.5 border-b border-zinc-800 flex-shrink-0">
           <button
-            onClick={() => setSidebarOpen((o) => !o)}
+            onClick={() => dispatch({ type: 'toggle', key: 'sidebarOpen' })}
             className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-zinc-800 text-zinc-400 touch-manipulation flex-shrink-0"
             aria-label="Canciones"
           >
@@ -305,23 +180,20 @@ export default function PlayerClient({ meta, songs }: Props) {
 
           <div className="flex-1 min-w-0">
             <h1 className="text-sm font-semibold text-white truncate leading-tight">{meta.title}</h1>
-            <p className="text-xs text-zinc-500 truncate">
-              {meta.artist}
-            </p>
+            <p className="text-xs text-zinc-500 truncate">{meta.artist}</p>
           </div>
 
-          {/* Tap BPM button → opens modal */}
           <button
-            onClick={() => setTapModalOpen(true)}
+            onClick={() => dispatch({ type: 'set', key: 'tapModalOpen', value: true })}
             className="flex-shrink-0 h-8 px-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 text-xs text-zinc-300 touch-manipulation tabular-nums transition-colors"
             title="Detectar BPM tappeando al ritmo"
           >
-            {effectiveBpm !== 80 || localBpm ? `${effectiveBpm} bpm` : 'TAP bpm'}
+            {effectiveBpm !== PLAYBACK.DEFAULT_BPM || localBpm ? `${effectiveBpm} bpm` : 'TAP bpm'}
           </button>
 
           {meta.chordsFile && (
             <button
-              onClick={() => setChordsOpen(true)}
+              onClick={() => dispatch({ type: 'set', key: 'chordsOpen', value: true })}
               className="flex-shrink-0 h-8 px-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 touch-manipulation"
             >
               Acordes
@@ -329,7 +201,7 @@ export default function PlayerClient({ meta, songs }: Props) {
           )}
         </header>
 
-        {/* Waveforms — fills available vertical space */}
+        {/* Waveforms */}
         <div className="flex-1 min-h-0 px-3 py-3">
           <MultiTrackWaveform
             songId={meta.id}
@@ -340,39 +212,41 @@ export default function PlayerClient({ meta, songs }: Props) {
             currentTime={engine.currentTime}
             duration={engine.duration}
             volumes={engine.volumes}
+            muted={engine.muted}
             onSeek={engine.seek}
             onVolumeChange={handleVolumeChange}
+            onToggleMute={engine.toggleMute}
             onSetActiveRegion={handleSetActiveRegion}
-            onRegionUpdate={handleRegionUpdate}
+            onRegionUpdate={regions.updateRegionBounds}
           />
         </div>
 
         {/* Regions section */}
         <RegionsSection
-          isOpen={regionsSectionOpen}
-          onToggle={() => setRegionsSectionOpen((v) => !v)}
+          isOpen={ui.regionsSectionOpen}
+          onToggle={() => dispatch({ type: 'toggle', key: 'regionsSectionOpen' })}
           metaRegions={meta.regions}
-          localRegions={localRegions}
+          localRegions={regions.localRegions}
           tracks={meta.tracks}
           activeRegionId={activeRegionId}
           currentTime={engine.currentTime}
           onSeek={engine.seek}
           onSetActiveRegion={handleSetActiveRegion}
           onAddRegion={handleAddRegion}
-          onEditRegion={handleEditRegion}
+          onEditRegion={regions.editRegion}
           onDeleteRegion={handleDeleteRegion}
         />
 
         {/* Markers section */}
         <MarkersSection
-          isOpen={markersSectionOpen}
-          onToggle={() => setMarkersSectionOpen((v) => !v)}
+          isOpen={ui.markersSectionOpen}
+          onToggle={() => dispatch({ type: 'toggle', key: 'markersSectionOpen' })}
           metaMarkers={meta.markers}
-          localMarkers={localMarkers}
+          localMarkers={markers.localMarkers}
           tracks={meta.tracks}
           onSeek={engine.seek}
-          onEditMarker={handleEditMarker}
-          onDelete={handleDeleteMarker}
+          onEditMarker={markers.editMarker}
+          onDelete={markers.deleteMarker}
         />
 
         {/* Transport */}
@@ -384,41 +258,42 @@ export default function PlayerClient({ meta, songs }: Props) {
             markers={allMarkers}
             regions={allRegions}
             activeRegionId={activeRegionId}
-            countingIn={countingIn}
-            countInBeat={countInBeat}
+            countingIn={metronome.countingIn}
+            countInBeat={metronome.countInBeat}
             onPlay={engine.play}
             onPause={engine.pause}
             onSeek={engine.seek}
             onSkip={handleSkip}
             onSkipToMarker={handleSkipToMarker}
             onSetActiveRegion={handleSetActiveRegion}
-            onCountIn={handleCountIn}
+            onCountIn={metronome.handleCountIn}
             tracks={meta.tracks}
-            onAddMarker={handleAddMarker}
-            metronomeOn={metronomeOn}
-            onToggleMetronome={() => setMetronomeOn((v) => !v)}
-            metronomeVolume={metronomeVolume}
-            onMetronomeVolumeChange={setMetronomeVolume}
+            onAddMarker={markers.addMarker}
+            metronomeOn={metronome.metronomeOn}
+            onToggleMetronome={metronome.toggleMetronome}
+            metronomeVolume={metronome.metronomeVolume}
+            onMetronomeVolumeChange={metronome.setMetronomeVolume}
+            globalVolume={engine.globalVolume}
+            onGlobalVolumeChange={engine.setGlobalVolume}
           />
         </div>
       </div>
 
-      {chordsOpen && meta.chordsFile && (
+      {ui.chordsOpen && meta.chordsFile && (
         <ChordsPanel
           songId={meta.id}
           chordsFile={meta.chordsFile}
-          onClose={() => setChordsOpen(false)}
+          onClose={() => dispatch({ type: 'set', key: 'chordsOpen', value: false })}
         />
       )}
 
-      {tapModalOpen && (
+      {ui.tapModalOpen && (
         <BpmTapModal
           currentBpm={localBpm ?? meta.bpm ?? null}
           onConfirm={handleConfirmBpm}
-          onClose={() => setTapModalOpen(false)}
+          onClose={() => dispatch({ type: 'set', key: 'tapModalOpen', value: false })}
         />
       )}
-
     </div>
   )
 }

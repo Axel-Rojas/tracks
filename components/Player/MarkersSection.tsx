@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight, Pencil } from 'lucide-react'
 import type { Marker, Track } from '@/lib/types'
-import { TRACK_COLORS } from '@/components/Player/MultiTrackWaveform'
+import { TRACK_COLORS } from '@/lib/colors'
+import { formatTime } from '@/lib/format'
 
 interface Props {
   isOpen: boolean
@@ -20,12 +21,6 @@ interface EditState {
   index: number
   label: string
   trackIndex: number | undefined
-}
-
-function fmt(s: number) {
-  const m = Math.floor(s / 60)
-  const sec = Math.floor(s % 60)
-  return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
 function markerColor(m: Marker) {
@@ -105,7 +100,7 @@ export default function MarkersSection({
                       background: `${color}12`,
                     }}
                   >
-                    <span className="opacity-60 tabular-nums">{fmt(m.time)}</span>
+                    <span className="opacity-60 tabular-nums">{formatTime(m.time)}</span>
                     <span>{m.label}</span>
                     {trackLabel && (
                       <span

@@ -19,14 +19,25 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
   const offsetRef = useRef(0)
   const startedAtRef = useRef(0)
 
+  const localVolsRef = useRef<number[]>([])
+  const globalVolumeRef = useRef(1)
+  const mutedRef = useRef<boolean[]>([])
+
   const [state, setState] = useState<EngineState>('idle')
   const stateRef = useRef<EngineState>('idle')
   const [volumes, setVolumes] = useState<number[]>([])
+  const [muted, setMuted] = useState<boolean[]>([])
+  const [globalVolume, setGlobalVolumeState] = useState(1)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const rafRef = useRef<number>(0)
 
-  // Tick para actualizar currentTime
+  function applyGain(i: number) {
+    const gain = gainsRef.current[i]
+    if (!gain) return
+    gain.gain.value = localVolsRef.current[i] * globalVolumeRef.current * (mutedRef.current[i] ? 0 : 1)
+  }
+
   const tick = useCallback(() => {
     const ctx = ctxRef.current
     if (!ctx || ctx.state !== 'running') return
@@ -39,7 +50,6 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
   }
 
-  // Cargar todas las pistas
   useEffect(() => {
     if (tracks.length === 0) return
     setState('loading')
@@ -48,11 +58,14 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
     ctxRef.current = ctx
 
     const defaultVols = tracks.map((t) => t.defaultVolume)
+    localVolsRef.current = defaultVols
+    mutedRef.current = tracks.map(() => false)
     setVolumes(defaultVols)
+    setMuted(tracks.map(() => false))
 
     const gains = tracks.map((_, i) => {
       const g = ctx.createGain()
-      g.gain.value = defaultVols[i]
+      g.gain.value = defaultVols[i] * globalVolumeRef.current
       g.connect(ctx.destination)
       return g
     })
@@ -75,6 +88,12 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
 
     return () => {
       stopTick()
+      sourcesRef.current.forEach((s) => {
+        try { s.stop(); s.disconnect() } catch { /* already stopped */ }
+      })
+      sourcesRef.current = []
+      buffersRef.current = []
+      gainsRef.current = []
       ctx.close()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -85,7 +104,6 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
       const ctx = ctxRef.current!
       const gains = gainsRef.current
 
-      // Limpiar sources anteriores
       sourcesRef.current.forEach((s) => {
         try { s.disconnect() } catch { /* already stopped */ }
       })
@@ -153,14 +171,30 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
   )
 
   const setVolume = useCallback((trackIndex: number, value: number) => {
-    const gain = gainsRef.current[trackIndex]
-    if (gain) gain.gain.value = value
+    localVolsRef.current[trackIndex] = value
+    applyGain(trackIndex)
     setVolumes((prev) => {
       const next = [...prev]
       next[trackIndex] = value
       return next
     })
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleMute = useCallback((trackIndex: number) => {
+    mutedRef.current[trackIndex] = !mutedRef.current[trackIndex]
+    applyGain(trackIndex)
+    setMuted((prev) => {
+      const next = [...prev]
+      next[trackIndex] = !prev[trackIndex]
+      return next
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setGlobalVolume = useCallback((value: number) => {
+    globalVolumeRef.current = value
+    setGlobalVolumeState(value)
+    gainsRef.current.forEach((_, i) => applyGain(i))
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const getContext = useCallback(() => ctxRef.current, [])
 
@@ -176,10 +210,14 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
     currentTime,
     duration,
     volumes,
+    muted,
+    globalVolume,
     play,
     pause,
     seek,
     setVolume,
+    toggleMute,
+    setGlobalVolume,
     getContext,
     releaseSources,
   }

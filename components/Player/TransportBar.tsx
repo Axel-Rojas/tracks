@@ -4,7 +4,10 @@ import { useRef } from 'react'
 import { Play, Pause, SkipBack, SkipForward, Loader2, Music, Drum, Repeat, Plus } from 'lucide-react'
 import type { Marker, Region, Track } from '@/lib/types'
 import type { EngineState } from '@/hooks/useAudioEngine'
-import { TRACK_COLORS } from '@/components/Player/MultiTrackWaveform'
+import { TRACK_COLORS } from '@/lib/colors'
+import { formatTime } from '@/lib/format'
+import { UI } from '@/lib/constants'
+import { Volume2, VolumeX } from 'lucide-react'
 
 interface Props {
   state: EngineState
@@ -28,12 +31,8 @@ interface Props {
   onToggleMetronome: () => void
   metronomeVolume: number
   onMetronomeVolumeChange: (v: number) => void
-}
-
-function fmt(s: number) {
-  const m = Math.floor(s / 60)
-  const sec = Math.floor(s % 60)
-  return `${m}:${sec.toString().padStart(2, '0')}`
+  globalVolume: number
+  onGlobalVolumeChange: (v: number) => void
 }
 
 function SkipButton({
@@ -59,7 +58,7 @@ function SkipButton({
     holdRef.current = setTimeout(() => {
       firedRef.current = true
       onSkipToMarker(dir)
-    }, 450)
+    }, UI.SKIP_HOLD_MS)
   }
 
   function onPointerUp() {
@@ -109,6 +108,8 @@ export default function TransportBar({
   onToggleMetronome,
   metronomeVolume,
   onMetronomeVolumeChange,
+  globalVolume,
+  onGlobalVolumeChange,
 }: Props) {
   const isPlaying = state === 'playing'
   const isLoading = state === 'loading' || state === 'idle'
@@ -118,7 +119,7 @@ export default function TransportBar({
     <div className="flex flex-col gap-2">
       {/* Progress bar */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-zinc-400 w-9 text-right tabular-nums">{fmt(currentTime)}</span>
+        <span className="text-xs text-zinc-400 w-9 text-right tabular-nums">{formatTime(currentTime)}</span>
         <input
           type="range"
           min={0}
@@ -133,7 +134,7 @@ export default function TransportBar({
           }}
           aria-label="Posición"
         />
-        <span className="text-xs text-zinc-400 w-9 tabular-nums">{fmt(duration)}</span>
+        <span className="text-xs text-zinc-400 w-9 tabular-nums">{formatTime(duration)}</span>
       </div>
 
       {/* Controls row */}
@@ -214,6 +215,31 @@ export default function TransportBar({
           onSkipToMarker={onSkipToMarker}
           disabled={isDisabled}
         />
+
+        {/* Global volume */}
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => onGlobalVolumeChange(globalVolume > 0 ? 0 : 1)}
+            className="text-zinc-400 hover:text-zinc-200 touch-manipulation transition-colors"
+            aria-label="Silenciar todo"
+            title="Volumen global"
+          >
+            {globalVolume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={globalVolume}
+            onChange={(e) => onGlobalVolumeChange(parseFloat(e.target.value))}
+            className="w-20 h-1.5 rounded-full appearance-none cursor-pointer touch-manipulation"
+            style={{
+              background: `linear-gradient(to right, #a1a1aa ${globalVolume * 100}%, #3f3f46 ${globalVolume * 100}%)`,
+            }}
+            aria-label="Volumen global"
+          />
+        </div>
 
         {/* Separator */}
         <div className="w-px h-8 bg-zinc-700 mx-1" />

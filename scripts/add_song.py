@@ -200,8 +200,8 @@ def write_metadata(song_dir: Path, song_id: str, title: str, artist: str, bpm: i
         "title": title,
         "artist": artist,
         "tracks": [
-            {"id": "instrumental", "label": "Instrumental", "file": "Instrumental.mp3", "defaultVolume": 1},
-            {"id": "voz", "label": "Voz", "file": "Voz.mp3", "defaultVolume": 1},
+            {"id": "instrumental", "label": "Instrumental", "file": "Instrumental.mp3", "defaultVolume": 0.5},
+            {"id": "voz", "label": "Voz", "file": "Voz.mp3", "defaultVolume": 0.5},
         ],
         "markers": [],
         "regions": [],

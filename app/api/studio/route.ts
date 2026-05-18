@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { writeFile, rm, readFile, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import { spawn } from 'child_process'
 import path from 'path'
 import os from 'os'
 import crypto from 'crypto'
-import type { SongIndex, SongMeta } from '@/lib/types'
+import type { SongIndex, SongMeta, SSEEvent } from '@/lib/types'
 
 const SONGS_DIR = path.join(process.cwd(), 'public', 'songs')
 const SONGS_JSON = path.join(process.cwd(), 'public', 'songs.json')
@@ -16,12 +17,6 @@ function devOnly() {
   }
   return null
 }
-
-type SSEEvent =
-  | { type: 'log'; text: string }
-  | { type: 'progress'; pct: number; text: string }
-  | { type: 'done'; id: string }
-  | { type: 'error'; message: string }
 
 export async function POST(req: NextRequest) {
   const guard = devOnly()
@@ -149,6 +144,7 @@ export async function POST(req: NextRequest) {
           } catch { /* non-fatal */ }
         }
 
+        revalidatePath('/')
         send({ type: 'done', id })
         controller.close()
       })

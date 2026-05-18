@@ -7,13 +7,13 @@
       "id": "instrumental",
       "label": "Instrumental",
       "file": "Instrumental.mp3",
-      "defaultVolume": 1
+      "defaultVolume": 0.5
     },
     {
       "id": "voz",
       "label": "Voz",
       "file": "Voz.mp3",
-      "defaultVolume": 1
+      "defaultVolume": 0.5
     }
   ],
   "markers": [],

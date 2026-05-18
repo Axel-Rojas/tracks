@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Marker, Region } from '@/lib/types'
+import { UI } from '@/lib/constants'
 
 interface PersistedState {
-  volumes: Record<string, number>
   activeRegionId: string | null
   localMarkers: Marker[]
   localRegions: Region[]
@@ -12,7 +12,6 @@ interface PersistedState {
 }
 
 const defaultState = (): PersistedState => ({
-  volumes: {},
   activeRegionId: null,
   localMarkers: [],
   localRegions: [],
@@ -42,7 +41,7 @@ export function usePlayerState(songId: string) {
         if (debounceRef.current) clearTimeout(debounceRef.current)
         debounceRef.current = setTimeout(() => {
           try { localStorage.setItem(key, JSON.stringify(next)) } catch { /* ignore */ }
-        }, 500)
+        }, UI.PERSIST_DEBOUNCE_MS)
         return next
       })
     },

@@ -1,18 +1,12 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { Volume2, VolumeX } from 'lucide-react'
 import WaveSurfer from 'wavesurfer.js'
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.js'
 import type { Marker, Region, Track } from '@/lib/types'
 import { rawUrl } from '@/lib/songs'
-
-export const TRACK_COLORS = [
-  { wave: '#4ade8055', progress: '#4ade80' }, // verde
-  { wave: '#60a5fa55', progress: '#60a5fa' }, // azul
-  { wave: '#fbbf2455', progress: '#fbbf24' }, // ámbar
-  { wave: '#f472b655', progress: '#f472b6' }, // rosa
-  { wave: '#a78bfa55', progress: '#a78bfa' }, // violeta
-]
+import { TRACK_COLORS } from '@/lib/colors'
 
 interface Props {
   songId: string
@@ -23,8 +17,10 @@ interface Props {
   currentTime: number
   duration: number
   volumes: number[]
+  muted: boolean[]
   onSeek: (t: number) => void
   onVolumeChange: (i: number, v: number) => void
+  onToggleMute: (i: number) => void
   onSetActiveRegion: (id: string | null) => void
   onRegionUpdate?: (id: string, start: number, end: number) => void
 }
@@ -48,8 +44,10 @@ export default function MultiTrackWaveform({
   currentTime,
   duration,
   volumes,
+  muted,
   onSeek,
   onVolumeChange,
+  onToggleMute,
   onSetActiveRegion,
   onRegionUpdate,
 }: Props) {
@@ -90,7 +88,7 @@ export default function MultiTrackWaveform({
         cursorColor: colors.progress,
         height: 'auto',
         normalize: true,
-        interact: isMain,
+        interact: true,
         url: rawUrl(`songs/${songId}/${track.file}`),
         plugins: [regionsPlugin],
       })
@@ -128,16 +126,14 @@ export default function MultiTrackWaveform({
         })
       })
 
-      if (isMain) {
-        ws.on('interaction', (newTime: number) => {
-          interactingRef.current = true
-          onSeek(newTime)
-          wsInstances.current.forEach((other, j) => {
-            if (j !== 0 && other.getDuration() > 0) other.setTime(newTime)
-          })
-          setTimeout(() => { interactingRef.current = false }, 100)
+      ws.on('interaction', (newTime: number) => {
+        interactingRef.current = true
+        onSeek(newTime)
+        wsInstances.current.forEach((other, j) => {
+          if (j !== i && other.getDuration() > 0) other.setTime(newTime)
         })
-      }
+        setTimeout(() => { interactingRef.current = false }, 100)
+      })
 
       regionsPlugin.on('region-clicked', (region, e) => {
         e.stopPropagation()
@@ -227,7 +223,7 @@ export default function MultiTrackWaveform({
       {tracks.map((track, i) => {
         const colors = TRACK_COLORS[i % TRACK_COLORS.length]
         const vol = volumes[i] ?? track.defaultVolume
-        const pct = `${Math.round(vol * 100)}%`
+        const isMuted = muted[i] ?? false
 
         return (
           <div
@@ -238,7 +234,7 @@ export default function MultiTrackWaveform({
             <div className="flex flex-col items-center gap-1 w-10 flex-shrink-0 py-0.5">
               <span
                 className="text-[10px] font-medium leading-none"
-                style={{ color: colors.progress }}
+                style={{ color: isMuted ? '#52525b' : colors.progress }}
               >
                 {track.label}
               </span>
@@ -250,7 +246,8 @@ export default function MultiTrackWaveform({
                   step={0.01}
                   value={vol}
                   onChange={(e) => onVolumeChange(i, parseFloat(e.target.value))}
-                  className="appearance-none cursor-pointer touch-manipulation rounded-full"
+                  disabled={isMuted}
+                  className="appearance-none cursor-pointer touch-manipulation rounded-full disabled:opacity-40"
                   style={{
                     writingMode: 'vertical-lr' as const,
                     direction: 'rtl',
@@ -261,9 +258,18 @@ export default function MultiTrackWaveform({
                   aria-label={`Volumen ${track.label}`}
                 />
               </div>
-              <span className="text-[10px] text-zinc-500 tabular-nums leading-none">
-                {Math.round(vol * 100)}
-              </span>
+              <button
+                onClick={() => onToggleMute(i)}
+                className={`h-9 w-9 flex items-center justify-center rounded-lg touch-manipulation transition-colors ${
+                  isMuted
+                    ? 'bg-zinc-600 text-zinc-300'
+                    : 'text-zinc-500 hover:bg-zinc-700 hover:text-zinc-200'
+                }`}
+                aria-label={isMuted ? `Activar ${track.label}` : `Silenciar ${track.label}`}
+                title={isMuted ? 'Activar' : 'Silenciar'}
+              >
+                {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+              </button>
             </div>
 
             {/* Waveform */}

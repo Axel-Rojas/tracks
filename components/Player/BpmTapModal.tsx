@@ -1,14 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { UI } from '@/lib/constants'
 
 interface Props {
   currentBpm: number | null
   onConfirm: (bpm: number) => void
   onClose: () => void
 }
-
-const SESSION_DURATION = 10 // seconds
 
 export default function BpmTapModal({ currentBpm, onConfirm, onClose }: Props) {
   const [detectedBpm, setDetectedBpm] = useState<number | null>(null)
@@ -38,14 +37,14 @@ export default function BpmTapModal({ currentBpm, onConfirm, onClose }: Props) {
 
     // Start countdown on first tap
     if (count === 1) {
-      setTimeLeft(SESSION_DURATION)
+      setTimeLeft(UI.BPM_TAP_SESSION_SEC)
       intervalRef.current = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev === null || prev <= 1) return 0
           return prev - 1
         })
       }, 1000)
-      endRef.current = setTimeout(() => stopSession(), SESSION_DURATION * 1000)
+      endRef.current = setTimeout(() => stopSession(), UI.BPM_TAP_SESSION_SEC * 1000)
     }
 
     // Calculate BPM from all intervals
@@ -53,7 +52,7 @@ export default function BpmTapModal({ currentBpm, onConfirm, onClose }: Props) {
       const intervals = tapsRef.current.slice(1).map((t, i) => t - tapsRef.current[i])
       const avg = intervals.reduce((a, b) => a + b) / intervals.length
       const bpm = Math.round(60000 / avg)
-      setDetectedBpm(Math.max(20, Math.min(300, bpm)))
+      setDetectedBpm(Math.max(UI.BPM_MIN, Math.min(UI.BPM_MAX, bpm)))
     }
   }
 
@@ -85,10 +84,10 @@ export default function BpmTapModal({ currentBpm, onConfirm, onClose }: Props) {
 
   const displayBpm = detectedBpm ?? currentBpm
   const isActive = timeLeft !== null && !done
-  const progress = timeLeft !== null ? (timeLeft / SESSION_DURATION) * 100 : 100
+  const progress = timeLeft !== null ? (timeLeft / UI.BPM_TAP_SESSION_SEC) * 100 : 100
   const parsedManual = (() => {
     const n = parseInt(manualInput, 10)
-    return !isNaN(n) && n >= 20 && n <= 300 ? n : null
+    return !isNaN(n) && n >= UI.BPM_MIN && n <= UI.BPM_MAX ? n : null
   })()
 
   return (
@@ -153,8 +152,8 @@ export default function BpmTapModal({ currentBpm, onConfirm, onClose }: Props) {
         <div className="flex gap-2 w-full items-center">
           <input
             type="number"
-            min={20}
-            max={300}
+            min={UI.BPM_MIN}
+            max={UI.BPM_MAX}
             placeholder="BPM manual"
             value={manualInput}
             onChange={(e) => setManualInput(e.target.value)}

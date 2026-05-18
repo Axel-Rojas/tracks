@@ -36,3 +36,9 @@ export interface SongIndex {
   title: string
   artist: string
 }
+
+export type SSEEvent =
+  | { type: 'log'; text: string }
+  | { type: 'progress'; pct: number; text: string }
+  | { type: 'done'; id: string }
+  | { type: 'error'; message: string }

@@ -1,5 +1,10 @@
 [
   {
+    "id": "silencio",
+    "title": "Silencio",
+    "artist": "Los Tipitos"
+  },
+  {
     "id": "tres-agujas",
     "title": "Tres Agujas",
     "artist": "Luis Alberto Spinetta"

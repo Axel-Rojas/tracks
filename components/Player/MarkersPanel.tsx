@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { X, Pencil } from 'lucide-react'
 import type { Marker, Track } from '@/lib/types'
-import { TRACK_COLORS } from '@/components/Player/MultiTrackWaveform'
+import { TRACK_COLORS } from '@/lib/colors'
+import { formatTime } from '@/lib/format'
 
 interface Props {
   isOpen: boolean
@@ -15,13 +16,6 @@ interface Props {
   onSeek: (t: number) => void
   onEditLabel: (index: number, label: string) => void
   onDelete: (index: number) => void
-}
-
-function fmt(s: number) {
-  const m = Math.floor(s / 60)
-  const sec = Math.floor(s % 60)
-  const ms = Math.round((s % 1) * 10)
-  return `${m}:${sec.toString().padStart(2, '0')}.${ms}`
 }
 
 export default function MarkersPanel({
@@ -92,7 +86,7 @@ export default function MarkersPanel({
               className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-800/60 active:bg-zinc-800 touch-manipulation text-left w-full min-h-[52px]"
             >
               <span className="text-xs tabular-nums text-zinc-500 w-14 flex-shrink-0">
-                {fmt(m.time)}
+                {formatTime(m.time, true)}
               </span>
               <span className="text-sm text-zinc-300 truncate flex-1">{m.label}</span>
             </button>
@@ -114,7 +108,7 @@ export default function MarkersPanel({
                 onClick={() => onSeek(m.time)}
                 className="text-xs tabular-nums text-zinc-500 w-14 flex-shrink-0 text-left touch-manipulation py-2"
               >
-                {fmt(m.time)}
+                {formatTime(m.time, true)}
               </button>
 
               {/* Track badge */}

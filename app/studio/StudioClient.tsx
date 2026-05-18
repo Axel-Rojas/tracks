@@ -3,6 +3,8 @@
 import { useRef, useState } from 'react'
 import { X, ArrowLeft, Music, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
+import type { SSEEvent } from '@/lib/types'
+import { parseETA, inferPhase } from '@/lib/studio'
 
 function slugify(s: string) {
   return s
@@ -24,27 +26,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inputCls =
   'bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-green-500 w-full'
-
-type SSEEvent =
-  | { type: 'log'; text: string }
-  | { type: 'progress'; pct: number; text: string }
-  | { type: 'done'; id: string }
-  | { type: 'error'; message: string }
-
-function parseETA(text: string): string | null {
-  const m = text.match(/\[(\d+:\d+)<(\d+:\d+)/)
-  if (!m) return null
-  return `${m[1]} transcurrido · faltan ${m[2]}`
-}
-
-function inferPhase(text: string): string | null {
-  if (text.includes('Descargando audio desde YouTube')) return 'Descargando desde YouTube...'
-  if (text.includes('Convirtiendo')) return 'Convirtiendo a WAV...'
-  if (text.includes('Separando pistas') || text.includes('Separating track')) return 'Separando pistas...'
-  if (text.includes('Downloading') || text.includes('Descargando modelo')) return 'Descargando modelo Demucs...'
-  if (text.includes('Iniciando')) return 'Iniciando...'
-  return null
-}
 
 export default function StudioClient() {
   const songInputRef = useRef<HTMLInputElement>(null)
