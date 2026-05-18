@@ -1,5 +1,10 @@
 [
   {
+    "id": "cuchillos",
+    "title": "Cuchillos",
+    "artist": "Charly Garcia"
+  },
+  {
     "id": "silencio",
     "title": "Silencio",
     "artist": "Los Tipitos"
