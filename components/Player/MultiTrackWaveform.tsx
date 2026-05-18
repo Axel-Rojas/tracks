@@ -88,7 +88,7 @@ export default function MultiTrackWaveform({
         cursorColor: colors.progress,
         height: 'auto',
         normalize: true,
-        interact: true,
+        interact: isMain,
         url: rawUrl(`songs/${songId}/${track.file}`),
         plugins: [regionsPlugin],
       })
@@ -126,14 +126,16 @@ export default function MultiTrackWaveform({
         })
       })
 
-      ws.on('interaction', (newTime: number) => {
-        interactingRef.current = true
-        onSeek(newTime)
-        wsInstances.current.forEach((other, j) => {
-          if (j !== i && other.getDuration() > 0) other.setTime(newTime)
+      if (isMain) {
+        ws.on('interaction', (newTime: number) => {
+          interactingRef.current = true
+          onSeek(newTime)
+          wsInstances.current.forEach((other, j) => {
+            if (j !== 0 && other.getDuration() > 0) other.setTime(newTime)
+          })
+          setTimeout(() => { interactingRef.current = false }, 100)
         })
-        setTimeout(() => { interactingRef.current = false }, 100)
-      })
+      }
 
       regionsPlugin.on('region-clicked', (region, e) => {
         e.stopPropagation()
@@ -276,6 +278,14 @@ export default function MultiTrackWaveform({
             <div
               className="flex-1 min-w-0 min-h-0 overflow-hidden rounded"
               ref={(el) => { containerRefs.current[i] = el }}
+              onClick={i !== 0 ? (e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                const t = ((e.clientX - rect.left) / rect.width) * duration
+                onSeek(t)
+                wsInstances.current.forEach((ws, j) => {
+                  if (ws.getDuration() > 0) ws.setTime(t)
+                })
+              } : undefined}
             />
           </div>
         )

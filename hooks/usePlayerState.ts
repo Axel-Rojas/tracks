@@ -5,14 +5,12 @@ import type { Marker, Region } from '@/lib/types'
 import { UI } from '@/lib/constants'
 
 interface PersistedState {
-  activeRegionId: string | null
   localMarkers: Marker[]
   localRegions: Region[]
   localBpm: number | null
 }
 
 const defaultState = (): PersistedState => ({
-  activeRegionId: null,
   localMarkers: [],
   localRegions: [],
   localBpm: null,

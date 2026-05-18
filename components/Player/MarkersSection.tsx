@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Pencil } from 'lucide-react'
+import { ChevronDown, ChevronRight, Pencil, Eye, EyeOff } from 'lucide-react'
 import type { Marker, Track } from '@/lib/types'
 import { TRACK_COLORS } from '@/lib/colors'
 import { formatTime } from '@/lib/format'
@@ -9,6 +9,8 @@ import { formatTime } from '@/lib/format'
 interface Props {
   isOpen: boolean
   onToggle: () => void
+  visible: boolean
+  onToggleVisible: () => void
   metaMarkers: Marker[]
   localMarkers: Marker[]
   tracks: Track[]
@@ -33,6 +35,8 @@ function markerColor(m: Marker) {
 export default function MarkersSection({
   isOpen,
   onToggle,
+  visible,
+  onToggleVisible,
   metaMarkers,
   localMarkers,
   tracks,
@@ -74,6 +78,13 @@ export default function MarkersSection({
           <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest flex-1 text-left">
             Marcadores{totalCount > 0 ? ` (${totalCount})` : ''}
           </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleVisible() }}
+            className="h-9 w-9 flex items-center justify-center text-zinc-600 hover:text-zinc-300 touch-manipulation transition-colors"
+            aria-label={visible ? 'Ocultar marcadores' : 'Mostrar marcadores'}
+          >
+            {visible ? <Eye size={14} /> : <EyeOff size={14} />}
+          </button>
           <span className="text-zinc-600">{isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
         </button>
 

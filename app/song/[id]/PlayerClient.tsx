@@ -58,6 +58,8 @@ export default function PlayerClient({ meta, songs }: Props) {
 
   // Active region & BPM
   const [activeRegionId, setActiveRegionId] = useState<string | null>(null)
+  const [markersVisible, setMarkersVisible] = useState(true)
+  const [regionsVisible, setRegionsVisible] = useState(true)
   const [localBpm, setLocalBpm] = useState<number | null>(null)
   const effectiveBpm = localBpm ?? meta.bpm ?? PLAYBACK.DEFAULT_BPM
 
@@ -100,7 +102,6 @@ export default function PlayerClient({ meta, songs }: Props) {
   // Hydrate from localStorage
   useEffect(() => {
     if (engine.state !== 'ready') return
-    setActiveRegionId(persisted.activeRegionId)
     if (persisted.localMarkers.length > 0) markers.hydrate(persisted.localMarkers)
     if (persisted.localRegions.length > 0) regions.hydrate(persisted.localRegions)
     if (persisted.localBpm) setLocalBpm(persisted.localBpm)
@@ -117,9 +118,8 @@ export default function PlayerClient({ meta, songs }: Props) {
   const handleSetActiveRegion = useCallback(
     (id: string | null) => {
       setActiveRegionId(id)
-      save({ activeRegionId: id })
     },
-    [save]
+    []
   )
 
   const handleSkip = useCallback(
@@ -206,8 +206,8 @@ export default function PlayerClient({ meta, songs }: Props) {
           <MultiTrackWaveform
             songId={meta.id}
             tracks={meta.tracks}
-            markers={allMarkers}
-            regions={allRegions}
+            markers={markersVisible ? allMarkers : []}
+            regions={regionsVisible ? allRegions : []}
             activeRegionId={activeRegionId}
             currentTime={engine.currentTime}
             duration={engine.duration}
@@ -225,6 +225,8 @@ export default function PlayerClient({ meta, songs }: Props) {
         <RegionsSection
           isOpen={ui.regionsSectionOpen}
           onToggle={() => dispatch({ type: 'toggle', key: 'regionsSectionOpen' })}
+          visible={regionsVisible}
+          onToggleVisible={() => setRegionsVisible((v) => !v)}
           metaRegions={meta.regions}
           localRegions={regions.localRegions}
           tracks={meta.tracks}
@@ -241,6 +243,8 @@ export default function PlayerClient({ meta, songs }: Props) {
         <MarkersSection
           isOpen={ui.markersSectionOpen}
           onToggle={() => dispatch({ type: 'toggle', key: 'markersSectionOpen' })}
+          visible={markersVisible}
+          onToggleVisible={() => setMarkersVisible((v) => !v)}
           metaMarkers={meta.markers}
           localMarkers={markers.localMarkers}
           tracks={meta.tracks}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Pencil, ArrowLeft, Repeat } from 'lucide-react'
+import { ChevronDown, ChevronRight, Pencil, ArrowLeft, Repeat, Eye, EyeOff } from 'lucide-react'
 import type { Region, Track } from '@/lib/types'
 import { TRACK_COLORS, REGION_PRESETS, DEFAULT_REGION_COLOR, solidFromRgba } from '@/lib/colors'
 import { formatTime } from '@/lib/format'
@@ -9,6 +9,8 @@ import { formatTime } from '@/lib/format'
 interface Props {
   isOpen: boolean
   onToggle: () => void
+  visible: boolean
+  onToggleVisible: () => void
   metaRegions: Region[]
   localRegions: Region[]
   tracks: Track[]
@@ -69,6 +71,8 @@ function TimeInput({
 export default function RegionsSection({
   isOpen,
   onToggle,
+  visible,
+  onToggleVisible,
   metaRegions,
   localRegions,
   tracks,
@@ -113,6 +117,13 @@ export default function RegionsSection({
           <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest flex-1 text-left">
             Regiones{allRegions.length > 0 ? ` (${allRegions.length})` : ''}
           </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleVisible() }}
+            className="h-9 w-9 flex items-center justify-center text-zinc-600 hover:text-zinc-300 touch-manipulation transition-colors"
+            aria-label={visible ? 'Ocultar regiones' : 'Mostrar regiones'}
+          >
+            {visible ? <Eye size={14} /> : <EyeOff size={14} />}
+          </button>
           <span className="text-zinc-600">{isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
         </button>
 

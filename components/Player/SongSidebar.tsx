@@ -1,7 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
-import { X, ArrowLeft } from 'lucide-react'
+import { X, ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react'
 import type { SongIndex } from '@/lib/types'
 
 interface Props {
@@ -11,8 +12,32 @@ interface Props {
   onClose: () => void
 }
 
+function groupByArtist(songs: SongIndex[]): [string, SongIndex[]][] {
+  const map = new Map<string, SongIndex[]>()
+  for (const song of songs) {
+    const list = map.get(song.artist) ?? []
+    list.push(song)
+    map.set(song.artist, list)
+  }
+  return [...map.entries()].sort(([a], [b]) => a.localeCompare(b, 'es'))
+}
+
 export default function SongSidebar({ songs, currentId, isOpen, onClose }: Props) {
   const showStudio = process.env.NODE_ENV === 'development'
+  const groups = groupByArtist(songs)
+
+  const [openArtists, setOpenArtists] = useState<Set<string>>(() => {
+    const active = songs.find((s) => s.id === currentId)
+    return active ? new Set([active.artist]) : new Set()
+  })
+
+  function toggleArtist(artist: string) {
+    setOpenArtists((prev) => {
+      const next = new Set(prev)
+      next.has(artist) ? next.delete(artist) : next.add(artist)
+      return next
+    })
+  }
 
   return (
     <>
@@ -53,26 +78,48 @@ export default function SongSidebar({ songs, currentId, isOpen, onClose }: Props
           <span className="text-sm font-medium text-zinc-300">Todas las canciones</span>
         </Link>
 
-        {/* Song list */}
+        {/* Song list grouped by artist */}
         <nav className="flex-1 overflow-y-auto py-2">
-          {songs.map((song) => {
-            const active = song.id === currentId
+          {groups.map(([artist, artistSongs]) => {
+            const isOpen = openArtists.has(artist)
+            const hasActive = artistSongs.some((s) => s.id === currentId)
             return (
-              <Link
-                key={song.id}
-                href={`/song/${song.id}`}
-                onClick={onClose}
-                className={`flex flex-col px-3 py-2.5 transition-colors touch-manipulation border-l-2 ${
-                  active
-                    ? 'bg-green-500/10 border-green-400'
-                    : 'hover:bg-zinc-800 border-transparent'
-                }`}
-              >
-                <span className={`text-sm font-medium truncate ${active ? 'text-green-400' : 'text-white'}`}>
-                  {song.title}
-                </span>
-                <span className="text-xs text-zinc-500 truncate">{song.artist}</span>
-              </Link>
+              <div key={artist}>
+                <button
+                  onClick={() => toggleArtist(artist)}
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 text-left touch-manipulation transition-colors hover:bg-zinc-800 active:bg-zinc-700 ${
+                    hasActive ? 'text-green-400' : 'text-zinc-300'
+                  }`}
+                >
+                  {isOpen
+                    ? <ChevronDown size={13} className="flex-shrink-0 text-zinc-500" />
+                    : <ChevronRight size={13} className="flex-shrink-0 text-zinc-500" />
+                  }
+                  <span className="text-xs font-semibold truncate uppercase tracking-wide">
+                    {artist}
+                  </span>
+                </button>
+
+                {isOpen && artistSongs.map((song) => {
+                  const active = song.id === currentId
+                  return (
+                    <Link
+                      key={song.id}
+                      href={`/song/${song.id}`}
+                      onClick={onClose}
+                      className={`flex items-center pl-7 pr-3 py-2 transition-colors touch-manipulation border-l-2 ${
+                        active
+                          ? 'bg-green-500/10 border-green-400'
+                          : 'hover:bg-zinc-800 border-transparent'
+                      }`}
+                    >
+                      <span className={`text-sm truncate ${active ? 'text-green-400' : 'text-zinc-200'}`}>
+                        {song.title}
+                      </span>
+                    </Link>
+                  )
+                })}
+              </div>
             )
           })}
         </nav>
