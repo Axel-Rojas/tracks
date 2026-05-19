@@ -122,15 +122,30 @@ def download_from_youtube(url: str, out_dir: Path) -> Path:
     return wavs[0]
 
 
+def sanitize_filename(p: Path) -> Path:
+    """Renombra el archivo a un nombre ASCII-seguro para evitar UnicodeEncodeError en Demucs."""
+    safe = p.stem.encode("ascii", "ignore").decode("ascii").strip()
+    safe = re.sub(r"[^\w\s-]", "", safe).strip() or "track"
+    if safe == p.stem:
+        return p
+    dst = p.parent / (safe + p.suffix)
+    p.rename(dst)
+    return dst
+
+
 def run_demucs(input_file: Path, out_dir: Path) -> Path:
     ffmpeg = find_ffmpeg()
     # Inyectar el directorio de ffmpeg en PATH para que Demucs también lo encuentre
     ffmpeg_dir = str(Path(ffmpeg).parent)
-    env = {**os.environ, "PATH": ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")}
+    env = {
+        **os.environ,
+        "PATH": ffmpeg_dir + os.pathsep + os.environ.get("PATH", ""),
+        "PYTHONIOENCODING": "utf-8",
+    }
 
     if input_file.suffix.lower() == ".wav":
         # Ya es WAV (ej: descargado desde YouTube) — Demucs lo puede leer directamente
-        wav_file = input_file
+        wav_file = sanitize_filename(input_file)
     else:
         # torchaudio en Python 3.13+ no puede cargar MP3 sin torchcodec.
         # Convertir a WAV con ffmpeg evita el problema.
@@ -144,6 +159,7 @@ def run_demucs(input_file: Path, out_dir: Path) -> Path:
         if conv.returncode != 0:
             print(f"ERROR: ffmpeg fallo al convertir el archivo.\n{conv.stderr}")
             sys.exit(1)
+        wav_file = sanitize_filename(wav_file)
 
     print("\n>> Separando pistas con Demucs (puede tardar varios minutos)...")
     result = subprocess.run(

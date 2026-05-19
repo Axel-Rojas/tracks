@@ -1,0 +1,21 @@
+{
+  "id": "inconsciente-colectivo",
+  "title": "Inconsciente Colectivo",
+  "artist": "Charly Garcia",
+  "tracks": [
+    {
+      "id": "instrumental",
+      "label": "Instrumental",
+      "file": "Instrumental.mp3",
+      "defaultVolume": 0.5
+    },
+    {
+      "id": "voz",
+      "label": "Voz",
+      "file": "Voz.mp3",
+      "defaultVolume": 0.5
+    }
+  ],
+  "markers": [],
+  "regions": []
+}
