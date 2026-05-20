@@ -6,6 +6,41 @@ import { rawUrl } from '@/lib/songs'
 
 export type EngineState = 'idle' | 'loading' | 'ready' | 'playing' | 'paused'
 
+async function fetchWithProgress(
+  url: string,
+  signal: AbortSignal,
+  onProgress: (ratio: number) => void
+): Promise<ArrayBuffer> {
+  const res = await fetch(url, { signal })
+  const contentLength = res.headers.get('content-length')
+
+  if (!contentLength || !res.body) {
+    onProgress(1)
+    return res.arrayBuffer()
+  }
+
+  const total = parseInt(contentLength, 10)
+  const reader = res.body.getReader()
+  const chunks: Uint8Array[] = []
+  let received = 0
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(value)
+    received += value.length
+    onProgress(received / total)
+  }
+
+  const buffer = new Uint8Array(received)
+  let offset = 0
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset)
+    offset += chunk.length
+  }
+  return buffer.buffer
+}
+
 interface AudioEngineOptions {
   songId: string
   tracks: Track[]
@@ -30,6 +65,9 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
   const [globalVolume, setGlobalVolumeState] = useState(1)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [loadingProgress, setLoadingProgress] = useState<number[]>([])
+  const loadingProgressRawRef = useRef<number[]>([])
+  const progressRafRef = useRef<number>(0)
   const rafRef = useRef<number>(0)
 
   function applyGain(i: number) {
@@ -53,6 +91,8 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
   useEffect(() => {
     if (tracks.length === 0) return
     setState('loading')
+    loadingProgressRawRef.current = tracks.map(() => 0)
+    setLoadingProgress(tracks.map(() => 0))
 
     const ctx = new AudioContext()
     ctxRef.current = ctx
@@ -75,10 +115,16 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
     const controller = new AbortController()
 
     Promise.all(
-      tracks.map((track) =>
-        fetch(rawUrl(track.file), { signal: controller.signal })
-          .then((r) => r.arrayBuffer())
-          .then((ab) => ctx.decodeAudioData(ab))
+      tracks.map((track, i) =>
+        fetchWithProgress(rawUrl(track.file), controller.signal, (ratio) => {
+          loadingProgressRawRef.current[i] = ratio
+          if (!progressRafRef.current) {
+            progressRafRef.current = requestAnimationFrame(() => {
+              setLoadingProgress([...loadingProgressRawRef.current])
+              progressRafRef.current = 0
+            })
+          }
+        }).then((ab) => ctx.decodeAudioData(ab))
       )
     )
       .then((buffers) => {
@@ -97,6 +143,10 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
       cancelled = true
       controller.abort()
       stopTick()
+      if (progressRafRef.current) {
+        cancelAnimationFrame(progressRafRef.current)
+        progressRafRef.current = 0
+      }
       sourcesRef.current.forEach((s) => {
         try { s.stop(); s.disconnect() } catch { /* already stopped */ }
       })
@@ -216,6 +266,7 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
 
   return {
     state,
+    loadingProgress,
     currentTime,
     duration,
     volumes,

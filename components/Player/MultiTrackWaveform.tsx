@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Volume2, VolumeX } from 'lucide-react'
 import WaveSurfer from 'wavesurfer.js'
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.js'
 import type { Marker, Region, Track } from '@/lib/types'
+import type { EngineState } from '@/hooks/useAudioEngine'
 import { rawUrl } from '@/lib/songs'
 import { TRACK_COLORS } from '@/lib/colors'
 
@@ -23,6 +24,8 @@ interface Props {
   onToggleMute: (i: number) => void
   onSetActiveRegion: (id: string | null) => void
   onRegionUpdate?: (id: string, start: number, end: number) => void
+  engineState: EngineState
+  loadingProgress: number[]
 }
 
 function markersForTrack(markers: Marker[], trackIndex: number) {
@@ -50,11 +53,14 @@ export default function MultiTrackWaveform({
   onToggleMute,
   onSetActiveRegion,
   onRegionUpdate,
+  engineState,
+  loadingProgress,
 }: Props) {
   const containerRefs = useRef<(HTMLDivElement | null)[]>([])
   const wsInstances = useRef<WaveSurfer[]>([])
   const regionsPluginsRef = useRef<(ReturnType<typeof RegionsPlugin.create> | null)[]>([])
   const wsReadyRef = useRef<boolean[]>([])
+  const [wsReadyState, setWsReadyState] = useState<boolean[]>([])
   const interactingRef = useRef(false)
   const markersRef = useRef(markers)
   markersRef.current = markers
@@ -70,6 +76,7 @@ export default function MultiTrackWaveform({
     wsInstances.current = []
     regionsPluginsRef.current = []
     wsReadyRef.current = []
+    setWsReadyState(tracks.map(() => false))
 
     tracks.forEach((track, i) => {
       const container = containerRefs.current[i]
@@ -97,6 +104,11 @@ export default function MultiTrackWaveform({
 
       ws.on('ready', () => {
         wsReadyRef.current[i] = true
+        setWsReadyState((prev) => {
+          const next = [...prev]
+          next[i] = true
+          return next
+        })
 
         // Markers for this track
         markersForTrack(markersRef.current, i).forEach((m) => {
@@ -276,7 +288,7 @@ export default function MultiTrackWaveform({
 
             {/* Waveform */}
             <div
-              className="flex-1 min-w-0 min-h-0 overflow-hidden rounded"
+              className="flex-1 min-w-0 min-h-0 overflow-hidden rounded relative"
               ref={(el) => { containerRefs.current[i] = el }}
               onClick={i !== 0 ? (e) => {
                 const rect = e.currentTarget.getBoundingClientRect()
@@ -286,7 +298,28 @@ export default function MultiTrackWaveform({
                   if (ws.getDuration() > 0) ws.setTime(t)
                 })
               } : undefined}
-            />
+            >
+              <div
+                className={`absolute inset-0 pointer-events-none flex flex-col justify-end pb-1 px-1 z-10 transition-opacity duration-500 ${
+                  (engineState === 'loading' || engineState === 'idle') || !wsReadyState[i]
+                    ? 'opacity-100'
+                    : 'opacity-0'
+                }`}
+              >
+                <div className="absolute inset-0 bg-zinc-900/70 rounded" />
+                <div className="relative h-1 bg-zinc-700 rounded-full overflow-hidden">
+                  <div
+                    className="absolute left-0 top-0 h-full rounded-full"
+                    style={{
+                      width: `${(loadingProgress[i] ?? 0) * 100}%`,
+                      backgroundColor: colors.progress,
+                      opacity: 0.7,
+                      transition: 'width 80ms linear',
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         )
       })}

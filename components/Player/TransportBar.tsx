@@ -33,6 +33,7 @@ interface Props {
   onMetronomeVolumeChange: (v: number) => void
   globalVolume: number
   onGlobalVolumeChange: (v: number) => void
+  loadingProgress?: number[]
 }
 
 function SkipButton({
@@ -110,10 +111,16 @@ export default function TransportBar({
   onMetronomeVolumeChange,
   globalVolume,
   onGlobalVolumeChange,
+  loadingProgress,
 }: Props) {
   const isPlaying = state === 'playing'
   const isLoading = state === 'loading' || state === 'idle'
   const isDisabled = isLoading || countingIn
+
+  const overallProgress =
+    loadingProgress && loadingProgress.length > 0
+      ? loadingProgress.reduce((a, b) => a + b, 0) / loadingProgress.length
+      : 0
 
   return (
     <div className="flex flex-col gap-2">
@@ -203,7 +210,20 @@ export default function TransportBar({
           className="h-14 w-14 flex items-center justify-center rounded-full bg-green-500 hover:bg-green-400 active:bg-green-600 disabled:opacity-40 transition-colors touch-manipulation text-black text-2xl select-none"
           aria-label={isPlaying ? 'Pausar' : 'Reproducir'}
         >
-          {isLoading ? <Loader2 size={24} className="animate-spin" /> : isPlaying ? <Pause size={24} /> : <Play size={24} />}
+          {isLoading ? (
+            <div className="flex flex-col items-center gap-0.5">
+              <Loader2 size={20} className="animate-spin" />
+              {overallProgress > 0 && (
+                <span className="text-[9px] tabular-nums leading-none text-zinc-900">
+                  {Math.round(overallProgress * 100)}%
+                </span>
+              )}
+            </div>
+          ) : isPlaying ? (
+            <Pause size={24} />
+          ) : (
+            <Play size={24} />
+          )}
         </button>
 
         {/* Skip forward */}

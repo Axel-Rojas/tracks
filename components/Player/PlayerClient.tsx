@@ -198,6 +198,8 @@ export default function PlayerClient({ meta, songs }: Props) {
             onToggleMute={engine.toggleMute}
             onSetActiveRegion={handleSetActiveRegion}
             onRegionUpdate={regions.updateRegionBounds}
+            engineState={engine.state}
+            loadingProgress={engine.loadingProgress}
           />
         </div>
 
@@ -254,6 +256,7 @@ export default function PlayerClient({ meta, songs }: Props) {
             onMetronomeVolumeChange={metronome.setMetronomeVolume}
             globalVolume={engine.globalVolume}
             onGlobalVolumeChange={engine.setGlobalVolume}
+            loadingProgress={engine.loadingProgress}
           />
         </div>
       </div>
