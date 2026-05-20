@@ -1,7 +1,7 @@
-// Browser: relative URL (served by Next.js from public/)
-// Client components use rawUrl() for asset paths and fetchJson() for data.
+const R2_BASE = process.env.NEXT_PUBLIC_R2_URL
+
 export function rawUrl(path: string): string {
-  return `/${path}`
+  return R2_BASE ? `${R2_BASE}/${path}` : `/${path}`
 }
 
 /**

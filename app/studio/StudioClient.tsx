@@ -358,7 +358,7 @@ export default function StudioClient() {
             >
               {result.ok ? (
                 <span>
-                  Guardado en <code className="font-mono">public/songs/{result.id}/</code>.{' '}
+                  Canción guardada en R2 y Convex.{' '}
                   <Link href="/" className="underline hover:text-green-200">Ver lista</Link>{' '}
                   ·{' '}
                   <Link href={`/songs/${result.id}`} className="underline hover:text-green-200">Abrir player</Link>

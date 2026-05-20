@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
-import { writeFile, rm, readFile, mkdir } from 'fs/promises'
-import { existsSync } from 'fs'
+import { writeFile, rm, readFile } from 'fs/promises'
 import { spawn } from 'child_process'
 import path from 'path'
 import os from 'os'
 import crypto from 'crypto'
-import type { SongIndex, SongMeta, SSEEvent } from '@/lib/types'
+import { ConvexHttpClient } from 'convex/browser'
+import { api } from '@/convex/_generated/api'
+import { uploadToR2 } from '@/lib/r2'
+import type { SSEEvent } from '@/lib/types'
 
 const SONGS_DIR = path.join(process.cwd(), 'public', 'songs')
-const SONGS_JSON = path.join(process.cwd(), 'public', 'songs.json')
+const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
 
 function devOnly() {
   if (process.env.NODE_ENV !== 'development') {
@@ -32,7 +34,8 @@ export async function POST(req: NextRequest) {
   const id = (formData.get('id') as string | null)?.trim()
   const title = (formData.get('title') as string | null)?.trim()
   const artist = (formData.get('artist') as string | null)?.trim()
-  const bpm = (formData.get('bpm') as string | null)?.trim()
+  const bpmStr = (formData.get('bpm') as string | null)?.trim()
+  const bpm = bpmStr ? parseInt(bpmStr) : undefined
   const songFile = formData.get('song') as File | null
   const chordsFile = formData.get('chords') as File | null
   const youtubeUrl = (formData.get('youtubeUrl') as string | null)?.trim() || null
@@ -52,7 +55,6 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Read files into memory before starting the stream
   let songBuffer: Buffer | null = null
   let chordsBuffer: Buffer | null = null
   let chordsFileName: string | null = null
@@ -61,7 +63,8 @@ export async function POST(req: NextRequest) {
     if (songFile) songBuffer = Buffer.from(await songFile.arrayBuffer())
     if (chordsFile instanceof File && chordsFile.size > 0) {
       chordsBuffer = Buffer.from(await chordsFile.arrayBuffer())
-      chordsFileName = chordsFile.name
+      // path.basename strips any directory traversal from the filename
+      chordsFileName = path.basename(chordsFile.name)
     }
   } catch {
     return NextResponse.json({ error: 'Error leyendo los archivos' }, { status: 500 })
@@ -73,7 +76,7 @@ export async function POST(req: NextRequest) {
     '--artist', artist,
     '--id', id,
     '--overwrite',
-    ...(bpm ? ['--bpm', bpm] : []),
+    ...(bpm !== undefined ? ['--bpm', String(bpm)] : []),
     ...(youtubeUrl ? ['--youtube-url', youtubeUrl] : []),
   ]
 
@@ -107,7 +110,6 @@ export async function POST(req: NextRequest) {
       const proc = spawn('python', procArgs, { cwd: process.cwd() })
 
       const handleChunk = (data: Buffer) => {
-        // tqdm uses \r for in-place updates — split on both \r and \n
         const parts = data.toString('utf-8').split(/[\r\n]/).filter((s) => s.trim())
         for (const part of parts) {
           const pctMatch = part.match(/^\s*(\d+)%\|/)
@@ -125,28 +127,62 @@ export async function POST(req: NextRequest) {
       proc.on('close', async (code) => {
         if (tmpPath) await rm(tmpPath, { force: true })
 
-        if (code !== 0) {
-          send({ type: 'error', message: 'Demucs falló. Revisá la terminal para más detalles.' })
+        const songDir = path.join(SONGS_DIR, id)
+
+        try {
+          if (code !== 0) {
+            send({ type: 'error', message: 'Demucs falló. Revisá la terminal para más detalles.' })
+            return
+          }
+
+          send({ type: 'log', text: 'Subiendo pistas a R2...' })
+
+          const [vozBuf, instrBuf] = await Promise.all([
+            readFile(path.join(songDir, 'Voz.mp3')),
+            readFile(path.join(songDir, 'Instrumental.mp3')),
+          ])
+
+          const r2Uploads: Promise<void>[] = [
+            uploadToR2(`songs/${id}/Voz.mp3`, vozBuf, 'audio/mpeg'),
+            uploadToR2(`songs/${id}/Instrumental.mp3`, instrBuf, 'audio/mpeg'),
+          ]
+
+          let chordsKey: string | undefined
+          if (chordsBuffer && chordsFileName) {
+            chordsKey = `songs/${id}/${chordsFileName}`
+            r2Uploads.push(uploadToR2(chordsKey, chordsBuffer, 'application/pdf'))
+          }
+
+          await Promise.all(r2Uploads)
+
+          send({ type: 'log', text: 'Guardando en Convex...' })
+
+          const convexId = await convex.mutation(api.songs.seed, {
+            title,
+            artist,
+            slug: id,
+            bpm,
+            isPublic: true,
+            chordsFile: chordsKey,
+            tracks: [
+              { id: 'instrumental', label: 'Instrumental', file: `songs/${id}/Instrumental.mp3`, defaultVolume: 0.5 },
+              { id: 'voz', label: 'Voz', file: `songs/${id}/Voz.mp3`, defaultVolume: 0.5 },
+            ],
+          })
+
+          if (!convexId) {
+            send({ type: 'log', text: 'Nota: slug ya existía en Convex, archivos actualizados solo en R2.' })
+          }
+
+          revalidatePath('/')
+          send({ type: 'done', id })
+        } catch (err) {
+          console.error('Studio upload error:', err)
+          send({ type: 'error', message: 'Error al guardar. Revisá la terminal para más detalles.' })
+        } finally {
           controller.close()
-          return
+          await rm(songDir, { recursive: true, force: true })
         }
-
-        // Handle optional chords PDF
-        if (chordsBuffer && chordsFileName) {
-          try {
-            const songDir = path.join(SONGS_DIR, id)
-            await mkdir(songDir, { recursive: true })
-            await writeFile(path.join(songDir, chordsFileName), chordsBuffer)
-            const metaPath = path.join(songDir, 'metadata.json')
-            const meta = JSON.parse(await readFile(metaPath, 'utf-8')) as SongMeta
-            meta.chordsFile = chordsFileName
-            await writeFile(metaPath, JSON.stringify(meta, null, 2))
-          } catch { /* non-fatal */ }
-        }
-
-        revalidatePath('/')
-        send({ type: 'done', id })
-        controller.close()
       })
     },
   })
@@ -158,18 +194,4 @@ export async function POST(req: NextRequest) {
       'Connection': 'keep-alive',
     },
   })
-}
-
-export async function GET() {
-  const guard = devOnly()
-  if (guard) return guard
-
-  if (!existsSync(SONGS_JSON)) return NextResponse.json([])
-
-  try {
-    const raw = await readFile(SONGS_JSON, 'utf-8')
-    return NextResponse.json(JSON.parse(raw) as SongIndex[])
-  } catch {
-    return NextResponse.json([])
-  }
 }
