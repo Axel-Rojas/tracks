@@ -105,7 +105,7 @@ export default function SongSidebar({ songs, currentId, isOpen, onClose }: Props
                   return (
                     <Link
                       key={song.id}
-                      href={`/song/${song.id}`}
+                      href={`/songs/${song.id}`}
                       onClick={onClose}
                       className={`flex items-center pl-7 pr-3 py-2 transition-colors touch-manipulation border-l-2 ${
                         active

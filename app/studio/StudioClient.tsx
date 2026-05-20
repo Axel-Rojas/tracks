@@ -361,7 +361,7 @@ export default function StudioClient() {
                   Guardado en <code className="font-mono">public/songs/{result.id}/</code>.{' '}
                   <Link href="/" className="underline hover:text-green-200">Ver lista</Link>{' '}
                   ·{' '}
-                  <Link href={`/song/${result.id}`} className="underline hover:text-green-200">Abrir player</Link>
+                  <Link href={`/songs/${result.id}`} className="underline hover:text-green-200">Abrir player</Link>
                 </span>
               ) : (
                 result.message

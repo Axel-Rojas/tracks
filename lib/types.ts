@@ -26,8 +26,6 @@ export interface SongMeta {
   artist: string
   bpm?: number
   tracks: Track[]
-  markers: Marker[]
-  regions: Region[]
   chordsFile?: string
 }
 

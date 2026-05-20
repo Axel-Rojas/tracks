@@ -89,7 +89,7 @@ export default function MultiTrackWaveform({
         height: 'auto',
         normalize: true,
         interact: isMain,
-        url: rawUrl(`songs/${songId}/${track.file}`),
+        url: rawUrl(track.file),
         plugins: [regionsPlugin],
       })
 

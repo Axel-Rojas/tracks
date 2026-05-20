@@ -11,7 +11,6 @@ interface Props {
   onToggle: () => void
   visible: boolean
   onToggleVisible: () => void
-  metaMarkers: Marker[]
   localMarkers: Marker[]
   tracks: Track[]
   onSeek: (t: number) => void
@@ -37,7 +36,6 @@ export default function MarkersSection({
   onToggle,
   visible,
   onToggleVisible,
-  metaMarkers,
   localMarkers,
   tracks,
   onSeek,
@@ -46,10 +44,9 @@ export default function MarkersSection({
 }: Props) {
   const [editState, setEditState] = useState<EditState | null>(null)
 
-  const allSorted = [
-    ...metaMarkers.map((m) => ({ ...m, isLocal: false as const, localIndex: -1 })),
-    ...localMarkers.map((m, i) => ({ ...m, isLocal: true as const, localIndex: i })),
-  ].sort((a, b) => a.time - b.time)
+  const allSorted = localMarkers
+    .map((m, i) => ({ ...m, localIndex: i }))
+    .sort((a, b) => a.time - b.time)
 
   function commitEdit() {
     if (!editState) return
@@ -123,16 +120,13 @@ export default function MarkersSection({
                     )}
                   </button>
 
-                  {/* Edit button — local markers only */}
-                  {m.isLocal && (
-                    <button
-                      onClick={() => setEditState({ index: m.localIndex, label: m.label, trackIndex: m.trackIndex })}
-                      className="h-9 w-9 flex items-center justify-center rounded-full text-zinc-600 hover:text-zinc-300 active:bg-zinc-800 touch-manipulation transition-colors text-sm"
-                      aria-label="Editar marcador"
-                    >
-                      <Pencil size={12} />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setEditState({ index: m.localIndex, label: m.label, trackIndex: m.trackIndex })}
+                    className="h-9 w-9 flex items-center justify-center rounded-full text-zinc-600 hover:text-zinc-300 active:bg-zinc-800 touch-manipulation transition-colors text-sm"
+                    aria-label="Editar marcador"
+                  >
+                    <Pencil size={12} />
+                  </button>
                 </div>
               )
             })}

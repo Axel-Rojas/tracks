@@ -11,7 +11,6 @@ interface Props {
   onToggle: () => void
   visible: boolean
   onToggleVisible: () => void
-  metaRegions: Region[]
   localRegions: Region[]
   tracks: Track[]
   activeRegionId: string | null
@@ -73,7 +72,6 @@ export default function RegionsSection({
   onToggle,
   visible,
   onToggleVisible,
-  metaRegions,
   localRegions,
   tracks,
   activeRegionId,
@@ -86,10 +84,7 @@ export default function RegionsSection({
 }: Props) {
   const [editState, setEditState] = useState<EditState | null>(null)
 
-  const allRegions = [
-    ...metaRegions.map((r) => ({ ...r, isLocal: false as const, localIndex: -1 })),
-    ...localRegions.map((r, i) => ({ ...r, isLocal: true as const, localIndex: i })),
-  ]
+  const allRegions = localRegions.map((r, i) => ({ ...r, localIndex: i }))
 
   function commitEdit() {
     if (!editState) return
@@ -109,14 +104,17 @@ export default function RegionsSection({
   return (
     <>
       <div className="border-t border-zinc-800 flex-shrink-0">
-        <button
-          onClick={onToggle}
-          className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-zinc-800/50 active:bg-zinc-800 touch-manipulation transition-colors"
-          aria-expanded={isOpen}
-        >
-          <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest flex-1 text-left">
-            Regiones{allRegions.length > 0 ? ` (${allRegions.length})` : ''}
-          </span>
+        <div className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-zinc-800/50 active:bg-zinc-800 touch-manipulation transition-colors">
+          <button
+            onClick={onToggle}
+            className="flex items-center gap-2 flex-1 text-left"
+            aria-expanded={isOpen}
+          >
+            <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest flex-1 text-left">
+              Regiones{allRegions.length > 0 ? ` (${allRegions.length})` : ''}
+            </span>
+            <span className="text-zinc-600">{isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
+          </button>
           <button
             onClick={(e) => { e.stopPropagation(); onToggleVisible() }}
             className="h-9 w-9 flex items-center justify-center text-zinc-600 hover:text-zinc-300 touch-manipulation transition-colors"
@@ -124,8 +122,7 @@ export default function RegionsSection({
           >
             {visible ? <Eye size={14} /> : <EyeOff size={14} />}
           </button>
-          <span className="text-zinc-600">{isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
-        </button>
+        </div>
 
         {isOpen && (
           <div className="px-3 pb-3 flex flex-col gap-2">
@@ -165,11 +162,10 @@ export default function RegionsSection({
                       <Repeat size={10} className="opacity-50" />
                     </button>
 
-                    {r.isLocal && (
-                      <button
-                        onClick={() =>
-                          setEditState({
-                            index: r.localIndex,
+                    <button
+                      onClick={() =>
+                        setEditState({
+                          index: r.localIndex,
                             label: r.label,
                             start: r.start,
                             end: r.end,
@@ -182,7 +178,6 @@ export default function RegionsSection({
                       >
                         <Pencil size={12} />
                       </button>
-                    )}
                   </div>
                 )
               })}

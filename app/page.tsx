@@ -1,4 +1,5 @@
-import { readJsonFromPublic } from '@/lib/songs.server'
+import { fetchQuery } from 'convex/nextjs'
+import { api } from '@/convex/_generated/api'
 import type { SongIndex } from '@/lib/types'
 import SongListClient from '@/components/SongList/SongListClient'
 
@@ -9,7 +10,7 @@ export default async function HomePage() {
   let error: string | null = null
 
   try {
-    songs = await readJsonFromPublic<SongIndex[]>('songs.json')
+    songs = await fetchQuery(api.songs.listPublic)
   } catch {
     error = 'No se pudo cargar la lista de canciones.'
   }

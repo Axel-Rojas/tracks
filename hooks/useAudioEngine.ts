@@ -71,22 +71,31 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
     })
     gainsRef.current = gains
 
+    let cancelled = false
+    const controller = new AbortController()
+
     Promise.all(
       tracks.map((track) =>
-        fetch(rawUrl(`songs/${songId}/${track.file}`))
+        fetch(rawUrl(track.file), { signal: controller.signal })
           .then((r) => r.arrayBuffer())
           .then((ab) => ctx.decodeAudioData(ab))
       )
     )
       .then((buffers) => {
+        if (cancelled) return
         buffersRef.current = buffers
         setDuration(Math.max(...buffers.map((b) => b.duration)))
         stateRef.current = 'ready'
         setState('ready')
       })
-      .catch(() => setState('idle'))
+      .catch((err) => {
+        if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return
+        setState('idle')
+      })
 
     return () => {
+      cancelled = true
+      controller.abort()
       stopTick()
       sourcesRef.current.forEach((s) => {
         try { s.stop(); s.disconnect() } catch { /* already stopped */ }

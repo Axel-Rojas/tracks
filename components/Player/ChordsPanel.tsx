@@ -4,13 +4,12 @@ import { X } from 'lucide-react'
 import { rawUrl } from '@/lib/songs'
 
 interface Props {
-  songId: string
   chordsFile: string
   onClose: () => void
 }
 
-export default function ChordsPanel({ songId, chordsFile, onClose }: Props) {
-  const url = rawUrl(`songs/${songId}/${chordsFile}`)
+export default function ChordsPanel({ chordsFile, onClose }: Props) {
+  const url = rawUrl(chordsFile)
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch bg-black/80" onClick={onClose}>

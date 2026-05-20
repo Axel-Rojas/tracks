@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plan de Migración — practica-piano</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f0f11;
+      color: #e2e8f0;
+      line-height: 1.7;
+      padding: 2rem 1rem 6rem;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    header {
+      border-bottom: 1px solid #2d2d3a;
+      padding-bottom: 2rem;
+      margin-bottom: 3rem;
+    }
+
+    header h1 {
+      font-size: 1.9rem;
+      font-weight: 700;
+      color: #f8fafc;
+      letter-spacing: -0.02em;
+    }
+
+    header p {
+      margin-top: 0.6rem;
+      color: #94a3b8;
+      font-size: 0.97rem;
+      max-width: 600px;
+    }
+
+    /* Table of contents */
+    .toc {
+      background: #17171f;
+      border: 1px solid #2d2d3a;
+      border-radius: 10px;
+      padding: 1.5rem 1.8rem;
+      margin-bottom: 3rem;
+    }
+
+    .toc h2 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #64748b;
+      margin-bottom: 1rem;
+    }
+
+    .toc ol {
+      list-style: none;
+      counter-reset: toc;
+    }
+
+    .toc li {
+      counter-increment: toc;
+      display: flex;
+      align-items: baseline;
+      gap: 0.7rem;
+      padding: 0.3rem 0;
+    }
+
+    .toc li::before {
+      content: counter(toc) ".";
+      font-size: 0.8rem;
+      color: #475569;
+      min-width: 1.2rem;
+    }
+
+    .toc a {
+      color: #7dd3fc;
+      text-decoration: none;
+      font-size: 0.95rem;
+    }
+
+    .toc a:hover { text-decoration: underline; }
+
+    .toc .stage-badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.15rem 0.5rem;
+      border-radius: 20px;
+      letter-spacing: 0.04em;
+    }
+
+    /* Architecture diagram */
+    .arch-grid {
+      display: grid;
+      grid-template-columns: 1fr 48px 1fr;
+      gap: 0;
+      margin: 1.5rem 0;
+      align-items: start;
+    }
+
+    .arch-box {
+      background: #17171f;
+      border: 1px solid #2d2d3a;
+      border-radius: 8px;
+      padding: 1.2rem;
+    }
+
+    .arch-box h4 {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.8rem;
+    }
+
+    .arch-box.current h4 { color: #f87171; }
+    .arch-box.target h4 { color: #34d399; }
+
+    .arch-arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-top: 2.5rem;
+      color: #475569;
+      font-size: 1.4rem;
+    }
+
+    .arch-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: #94a3b8;
+      padding: 0.2rem 0;
+    }
+
+    .arch-item .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #475569;
+      margin-top: 0.55rem;
+      flex-shrink: 0;
+    }
+
+    .arch-box.target .arch-item .dot { background: #34d399; }
+
+    /* Stage sections */
+    .stage {
+      margin-bottom: 3.5rem;
+      scroll-margin-top: 2rem;
+    }
+
+    .stage-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid #2d2d3a;
+    }
+
+    .stage-number {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.2rem;
+      height: 2.2rem;
+      border-radius: 50%;
+      font-weight: 700;
+      font-size: 0.95rem;
+      flex-shrink: 0;
+    }
+
+    .stage-1 .stage-number { background: #1e3a5f; color: #7dd3fc; }
+    .stage-2 .stage-number { background: #1e3f2a; color: #4ade80; }
+    .stage-3 .stage-number { background: #3b1f5e; color: #c084fc; }
+
+    .stage-header-text h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #f8fafc;
+      letter-spacing: -0.01em;
+    }
+
+    .stage-header-text p {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-top: 0.15rem;
+    }
+
+    /* Subsections */
+    h3 {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #64748b;
+      margin: 1.8rem 0 0.8rem;
+    }
+
+    p { color: #94a3b8; font-size: 0.93rem; margin-bottom: 0.8rem; }
+
+    /* Code blocks */
+    pre {
+      background: #0a0a0f;
+      border: 1px solid #2d2d3a;
+      border-radius: 8px;
+      padding: 1.1rem 1.3rem;
+      overflow-x: auto;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      margin: 0.8rem 0 1.2rem;
+    }
+
+    code {
+      font-family: "JetBrains Mono", "Fira Code", Menlo, monospace;
+      color: #e2e8f0;
+    }
+
+    pre code { color: #e2e8f0; }
+
+    .comment { color: #475569; }
+    .kw { color: #93c5fd; }
+    .str { color: #86efac; }
+    .fn { color: #fde68a; }
+    .type { color: #f0abfc; }
+    .num { color: #fb923c; }
+
+    /* Inline code */
+    p code, li code {
+      background: #1e1e2a;
+      border: 1px solid #2d2d3a;
+      border-radius: 4px;
+      padding: 0.1em 0.4em;
+      font-size: 0.83em;
+      color: #e2e8f0;
+    }
+
+    /* Step list */
+    .steps {
+      list-style: none;
+      counter-reset: steps;
+    }
+
+    .steps > li {
+      counter-increment: steps;
+      display: flex;
+      gap: 0.9rem;
+      padding: 0.6rem 0;
+    }
+
+    .steps > li::before {
+      content: counter(steps);
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #94a3b8;
+      min-width: 1.6rem;
+      height: 1.6rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 0.05rem;
+    }
+
+    .steps > li p { margin: 0; font-size: 0.9rem; }
+
+    /* Caveats */
+    .caveats {
+      background: #1a1208;
+      border: 1px solid #78350f;
+      border-radius: 8px;
+      padding: 1.2rem 1.4rem;
+      margin: 1.2rem 0;
+    }
+
+    .caveats-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #f59e0b;
+      margin-bottom: 0.8rem;
+    }
+
+    .caveats ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .caveats li {
+      display: flex;
+      gap: 0.6rem;
+      font-size: 0.88rem;
+      color: #d97706;
+    }
+
+    .caveats li::before {
+      content: "⚠";
+      flex-shrink: 0;
+      opacity: 0.8;
+    }
+
+    /* Notes (green) */
+    .note {
+      background: #0f1f14;
+      border: 1px solid #166534;
+      border-radius: 8px;
+      padding: 1rem 1.3rem;
+      margin: 1rem 0;
+      font-size: 0.88rem;
+      color: #4ade80;
+    }
+
+    .note strong { color: #86efac; }
+
+    /* File changes table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin: 0.8rem 0 1.4rem;
+    }
+
+    th {
+      text-align: left;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #475569;
+      padding: 0.5rem 0.8rem;
+      border-bottom: 1px solid #2d2d3a;
+    }
+
+    td {
+      padding: 0.55rem 0.8rem;
+      border-bottom: 1px solid #1e1e2a;
+      vertical-align: top;
+    }
+
+    td:first-child { color: #7dd3fc; font-family: monospace; font-size: 0.82rem; }
+    td:nth-child(2) { color: #94a3b8; }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.15rem 0.45rem;
+      border-radius: 20px;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-new { background: #064e3b; color: #34d399; }
+    .badge-mod { background: #1e3a5f; color: #7dd3fc; }
+    .badge-del { background: #450a0a; color: #f87171; }
+
+    /* Schema block */
+    .schema {
+      background: #0a0a0f;
+      border: 1px solid #2d2d3a;
+      border-radius: 8px;
+      padding: 1.2rem 1.4rem;
+      margin: 0.8rem 0 1.4rem;
+      font-family: monospace;
+      font-size: 0.82rem;
+      line-height: 1.7;
+    }
+
+    /* Divider */
+    hr {
+      border: none;
+      border-top: 1px solid #1e1e2a;
+      margin: 3rem 0;
+    }
+
+    /* Verification checklist */
+    .checklist {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .checklist li {
+      display: flex;
+      gap: 0.7rem;
+      font-size: 0.9rem;
+      color: #94a3b8;
+    }
+
+    .checklist li::before {
+      content: "☐";
+      color: #475569;
+      flex-shrink: 0;
+    }
+
+    /* Summary cards */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    .summary-card {
+      background: #17171f;
+      border: 1px solid #2d2d3a;
+      border-radius: 8px;
+      padding: 1.1rem 1.2rem;
+    }
+
+    .summary-card .label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #475569;
+      margin-bottom: 0.4rem;
+    }
+
+    .summary-card .value {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+
+    .summary-card .sub {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 0.2rem;
+    }
+
+    @media (max-width: 640px) {
+      .arch-grid { grid-template-columns: 1fr; }
+      .arch-arrow { display: none; }
+      .summary-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>Plan de Migración — practica-piano</h1>
+    <p>
+      Migración progresiva de archivos estáticos y JSON en <code>public/</code> a una arquitectura
+      cloud: <strong>Convex DB</strong> para metadata, <strong>Cloudflare R2</strong> para audio,
+      <strong>Modal</strong> para procesamiento, y auth con listas por usuario.
+    </p>
+  </header>
+
+  <!-- TOC -->
+  <div class="toc">
+    <h2>Contenido</h2>
+    <ol>
+      <li>
+        <a href="#arquitectura">Arquitectura: antes vs. después</a>
+      </li>
+      <li>
+        <a href="#etapa-1">Etapa 1 — Catálogo a R2 + Convex DB</a>
+        <span class="stage-badge" style="background:#1e3a5f;color:#7dd3fc;">Prioridad alta</span>
+      </li>
+      <li>
+        <a href="#etapa-2">Etapa 2 — Worker Demucs en Modal</a>
+        <span class="stage-badge" style="background:#1e3f2a;color:#4ade80;">Prioridad media</span>
+      </li>
+      <li>
+        <a href="#etapa-3">Etapa 3 — Autenticación y listas por usuario</a>
+        <span class="stage-badge" style="background:#3b1f5e;color:#c084fc;">Futuro</span>
+      </li>
+    </ol>
+  </div>
+
+  <!-- ARCHITECTURE OVERVIEW -->
+  <section id="arquitectura" class="stage">
+    <h3>Arquitectura: antes vs. después (estado final)</h3>
+
+    <div class="arch-grid">
+      <div class="arch-box current">
+        <h4>Actual</h4>
+        <div class="arch-item"><div class="dot"></div><span>Metadata → <code>public/songs.json</code> + <code>metadata.json</code></span></div>
+        <div class="arch-item"><div class="dot"></div><span>MP3s/PDFs → <code>public/songs/{id}/</code> (commiteados al repo)</span></div>
+        <div class="arch-item"><div class="dot"></div><span>Markers/Regions/BPM del usuario → <code>localStorage</code></span></div>
+        <div class="arch-item"><div class="dot"></div><span>Procesamiento → Python local (Demucs + yt-dlp)</span></div>
+        <div class="arch-item"><div class="dot"></div><span>Sin auth, sin listas personales</span></div>
+      </div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box target">
+        <h4>Objetivo</h4>
+        <div class="arch-item"><div class="dot"></div><span>Metadata → <strong>Convex DB</strong> (tabla <code>songs</code>)</span></div>
+        <div class="arch-item"><div class="dot"></div><span>MP3s/PDFs → <strong>Cloudflare R2</strong> (egress gratis, 10 GB free)</span></div>
+        <div class="arch-item"><div class="dot"></div><span>Markers/Regions/BPM del usuario → <code>localStorage</code> (sin cambios)</span></div>
+        <div class="arch-item"><div class="dot"></div><span>Procesamiento → <strong>Modal</strong> (GPU en la nube, Python nativo)</span></div>
+        <div class="arch-item"><div class="dot"></div><span>Auth + listas personales → <strong>Convex Auth</strong> + tabla <code>userLibrary</code></span></div>
+      </div>
+    </div>
+
+    <div class="note">
+      <strong>Lo que no cambia nunca:</strong> los hooks de audio (<code>useAudioEngine</code>,
+      <code>useMarkersCrud</code>, <code>useRegionsCrud</code>, etc.) y la lógica de localStorage para el estado del player.
+      La migración es transparente para el player — solo cambia de dónde viene la URL del MP3.
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="label">R2 Storage free</div>
+        <div class="value">10 GB</div>
+        <div class="sub">+ egress gratis · ideal para MP3s</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Convex free</div>
+        <div class="value">1 M reads/mes</div>
+        <div class="sub">Metadata pequeña, bajo volumen</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Modal</div>
+        <div class="value">$30 créditos</div>
+        <div class="sub">~10 s GPU por canción con Demucs</div>
+      </div>
+    </div>
+  </section>
+
+  <hr />
+
+  <!-- ETAPA 1 -->
+  <section id="etapa-1" class="stage stage-1">
+    <div class="stage-header">
+      <div class="stage-number">1</div>
+      <div class="stage-header-text">
+        <h2>Catálogo a Cloudflare R2 + Convex DB</h2>
+        <p>Reemplazar <code>public/songs.json</code>, <code>metadata.json</code> y los archivos de audio estáticos.</p>
+      </div>
+    </div>
+
+    <h3>Por qué primero</h3>
+    <p>
+      Esta etapa desbloquea todo lo demás. Una vez que los MP3s viven en R2 y la metadata en Convex,
+      la Etapa 2 (Modal) solo necesita saber a dónde subir los stems; y la Etapa 3 (auth) solo agrega
+      tablas nuevas al schema existente. El player sigue funcionando igual — solo cambia la URL del fetch.
+    </p>
+
+    <h3>Schema Convex</h3>
+    <div class="schema">
+<span class="comment">// convex/schema.ts</span>
+songs: defineTable({
+  title:      <span class="type">v.string()</span>,
+  artist:     <span class="type">v.string()</span>,
+  bpm:        <span class="type">v.optional(v.number())</span>,
+  slug:       <span class="type">v.string()</span>,       <span class="comment">// "blackbird" — preserva las URLs /song/blackbird</span>
+  isPublic:   <span class="type">v.boolean()</span>,     <span class="comment">// true = catálogo público</span>
+  ownerId:    <span class="type">v.optional(v.string())</span>,  <span class="comment">// null ahora; userId en Etapa 3</span>
+  chordsFile: <span class="type">v.optional(v.string())</span>,  <span class="comment">// R2 path: "songs/blackbird/acordes.pdf"</span>
+  tracks: <span class="type">v.array</span>(v.object({
+    id:            <span class="type">v.string()</span>,   <span class="comment">// "voz", "instrumental"</span>
+    label:         <span class="type">v.string()</span>,   <span class="comment">// "Voz", "Instrumental"</span>
+    file:          <span class="type">v.string()</span>,   <span class="comment">// R2 path: "songs/blackbird/Voz.mp3"</span>
+    defaultVolume: <span class="type">v.number()</span>,
+  })),
+  markers: <span class="type">v.array</span>(v.object({
+    time: <span class="type">v.number()</span>, label: <span class="type">v.string()</span>, trackIndex: <span class="type">v.optional(v.number())</span>,
+  })),
+  regions: <span class="type">v.array</span>(v.object({
+    id: <span class="type">v.string()</span>, label: <span class="type">v.string()</span>,
+    start: <span class="type">v.number()</span>, end: <span class="type">v.number()</span>,
+    color: <span class="type">v.optional(v.string())</span>, trackIndex: <span class="type">v.optional(v.number())</span>,
+  })),
+})
+  .index(<span class="str">"by_slug"</span>, [<span class="str">"slug"</span>])
+  .index(<span class="str">"by_public"</span>, [<span class="str">"isPublic"</span>])
+  .index(<span class="str">"by_owner"</span>, [<span class="str">"ownerId"</span>])
+  .index(<span class="str">"by_artist"</span>, [<span class="str">"artist"</span>])
+    </div>
+
+    <p>
+      <strong>Nota sobre <code>tracks[].file</code>:</strong> se guarda el path relativo en R2
+      (<code>"songs/blackbird/Voz.mp3"</code>), no la URL completa. La URL se construye igual que hoy
+      con <code>rawUrl()</code>. Si la URL pública del bucket cambia, solo hay que cambiar la
+      variable de entorno, no migrar los datos.
+    </p>
+
+    <h3>Pasos de implementación</h3>
+    <ol class="steps">
+      <li><p>Instalar Convex: <code>pnpm add convex</code> → <code>npx convex dev</code> (genera <code>convex/_generated/</code> y <code>convex.json</code>). Agregar <code>ConvexClientProvider</code> en <code>app/layout.tsx</code>.</p></li>
+      <li><p>Crear bucket R2 en Cloudflare: habilitar acceso público, configurar CORS (<code>AllowedOrigins</code>: tu dominio de Vercel, <code>AllowedMethods: ["GET"]</code>).</p></li>
+      <li><p>Generar API token R2 con permisos de escritura. Agregar variables de entorno:
+        <code>NEXT_PUBLIC_R2_URL</code>, <code>R2_ACCOUNT_ID</code>, <code>R2_ACCESS_KEY_ID</code>,
+        <code>R2_SECRET_ACCESS_KEY</code>, <code>R2_BUCKET_NAME</code>.</p></li>
+      <li><p>Crear <code>scripts/migrate-to-convex.ts</code>: lee <code>public/songs.json</code>, por cada canción lee <code>metadata.json</code>, sube los MP3s/PDFs a R2 manteniendo el path <code>songs/{id}/Voz.mp3</code>, e inserta el documento en Convex con <code>isPublic: true, ownerId: null</code>.</p></li>
+      <li><p>Correr el script de migración una sola vez: <code>npx tsx scripts/migrate-to-convex.ts</code>. Verificar en el Convex dashboard y en la URL pública de R2.</p></li>
+      <li><p>Actualizar <code>lib/songs.ts</code>: <code>rawUrl(path)</code> devuelve <code>${NEXT_PUBLIC_R2_URL}/${path}</code> si el env var existe; si no, <code>/${path}</code> como hoy (para desarrollo local sin R2).</p></li>
+      <li><p>Actualizar <code>app/page.tsx</code> para usar <code>fetchQuery(api.songs.listPublic)</code> en lugar de <code>readJsonFromPublic('songs.json')</code>.</p></li>
+      <li><p>Actualizar <code>app/song/[id]/page.tsx</code> para usar <code>fetchQuery(api.songs.getBySlug, { slug: id })</code>.</p></li>
+      <li><p>Eliminar <code>lib/songs.server.ts</code> (ya no hay filesystem reads de metadata).</p></li>
+      <li><p>Verificar que el player carga y reproduce audio desde R2. Una vez confirmado, eliminar los binarios de audio del repo (<code>public/songs/*/Voz.mp3</code>, etc.).</p></li>
+    </ol>
+
+    <h3>Archivos modificados</h3>
+    <table>
+      <tr><th>Archivo</th><th>Cambio</th></tr>
+      <tr><td>convex/schema.ts</td><td><span class="badge badge-new">nuevo</span> Schema completo</td></tr>
+      <tr><td>convex/songs.ts</td><td><span class="badge badge-new">nuevo</span> listPublic, getBySlug, create</td></tr>
+      <tr><td>app/layout.tsx</td><td><span class="badge badge-mod">mod</span> Agregar ConvexClientProvider</td></tr>
+      <tr><td>lib/songs.ts</td><td><span class="badge badge-mod">mod</span> rawUrl() apunta a R2 si env var existe</td></tr>
+      <tr><td>lib/songs.server.ts</td><td><span class="badge badge-del">eliminar</span> Reemplazado por queries de Convex</td></tr>
+      <tr><td>app/page.tsx</td><td><span class="badge badge-mod">mod</span> Usar fetchQuery(api.songs.listPublic)</td></tr>
+      <tr><td>app/song/[id]/page.tsx</td><td><span class="badge badge-mod">mod</span> Usar fetchQuery(api.songs.getBySlug)</td></tr>
+      <tr><td>scripts/migrate-to-convex.ts</td><td><span class="badge badge-new">nuevo</span> Script one-shot de migración</td></tr>
+    </table>
+
+    <div class="caveats">
+      <div class="caveats-title">⚑ Caveats de la Etapa 1</div>
+      <ul>
+        <li><strong>CORS en R2:</strong> sin CORS configurado correctamente, el browser no puede hacer <code>fetch()</code> al bucket. El Web Audio API necesita recibir el ArrayBuffer — si hay error de CORS, el audio simplemente no carga y el error es confuso. Verificar con DevTools antes de eliminar los archivos de <code>public/</code>.</li>
+        <li><strong>Content-Type de los MP3s:</strong> R2 puede servir archivos con <code>Content-Type: application/octet-stream</code> si no se especifica al subirlos. Asegurarse de pasar <code>ContentType: 'audio/mpeg'</code> al subir con <code>PutObjectCommand</code>, o el browser puede no decodificarlos correctamente.</li>
+        <li><strong>URLs de Convex vs. generadas:</strong> los documentos de Convex usan IDs internos (<code>Id&lt;"songs"&gt;</code>), no slugs. El campo <code>slug</code> es el que se usa para las URLs del router (<code>/song/blackbird</code>). El índice <code>by_slug</code> debe ser único — agregar una validación en la mutation <code>create</code>.</li>
+        <li><strong>No eliminar <code>public/songs/</code> hasta verificar:</strong> correr el script de migración, confirmar que las 15 canciones están en Convex y los MP3s accesibles en R2, y recién después eliminar los binarios del repo. El historial de git seguirá teniendo los binarios — usar <code>git filter-repo</code> después si importa el tamaño del repo.</li>
+        <li><strong>ISR / cache de Next.js:</strong> actualmente <code>app/page.tsx</code> tiene <code>revalidate: 3600</code>. Con Convex las queries son reactivas por defecto en el cliente — decidir si la home es RSC (con <code>fetchQuery</code> en servidor, cache manual) o Client Component (auto-reactivo). Para empezar, RSC con <code>fetchQuery</code> es más simple.</li>
+        <li><strong>Desarrollo local sin R2:</strong> el <code>rawUrl()</code> con fallback a <code>/</code> permite seguir usando los archivos de <code>public/</code> en local si <code>NEXT_PUBLIC_R2_URL</code> no está seteado. Útil mientras se implementa la migración.</li>
+      </ul>
+    </div>
+
+    <h3>Verificación</h3>
+    <ul class="checklist">
+      <li>Script de migración termina sin errores; 15 documentos visibles en el Convex dashboard</li>
+      <li>URL pública de R2: <code>https://pub-xxx.r2.dev/songs/blackbird/Voz.mp3</code> devuelve 200 con <code>Content-Type: audio/mpeg</code></li>
+      <li>La home lista las 15 canciones cargando desde Convex</li>
+      <li><code>/song/blackbird</code> carga metadata desde Convex y audio desde R2</li>
+      <li>WaveSurfer renderiza la waveform; el player reproduce correctamente</li>
+      <li>Markers y regions del usuario siguen persistiendo en localStorage</li>
+    </ul>
+  </section>
+
+  <hr />
+
+  <!-- ETAPA 2 -->
+  <section id="etapa-2" class="stage stage-2">
+    <div class="stage-header">
+      <div class="stage-number">2</div>
+      <div class="stage-header-text">
+        <h2>Worker Demucs en Modal</h2>
+        <p>Reemplazar el subprocess de Python local por una función Modal con GPU.</p>
+      </div>
+    </div>
+
+    <h3>Por qué Modal</h3>
+    <p>
+      Demucs necesita GPU para ser práctico (~10 s con GPU vs. 5-10 min en CPU). Modal permite
+      definir el ambiente de Python con Demucs, yt-dlp y ffmpeg como imagen Docker, y exponer la
+      función como endpoint HTTP. No requiere mantener infraestructura — solo se paga cuando corre.
+      El free tier incluye $30 de créditos que alcanzan para cientos de canciones.
+    </p>
+
+    <h3>Arquitectura del procesamiento</h3>
+    <pre><code><span class="comment">// Flujo actual (Python local):</span>
+browser → POST /api/studio → subprocess Python → escribe public/songs/{id}/ → actualiza songs.json
+
+<span class="comment">// Flujo nuevo (Modal + R2 + Convex):</span>
+browser → POST /api/studio
+  → si hay MP3: subirlo a R2 como temp/{uuid}.mp3
+  → llamar endpoint Modal con { audioUrl | youtubeUrl, songId, title, artist, bpm }
+  Modal:
+    → descarga audio (de R2 temp o YouTube)
+    → corre Demucs --two-stems=vocals --mp3
+    → sube Voz.mp3 + Instrumental.mp3 a R2: songs/{songId}/
+    → (opcional) sube acordes.pdf
+    → devuelve { ok: true, songId }
+  /api/studio:
+    → llama fetchMutation(api.songs.create, { slug, title, artist, tracks, ... })
+    → revalida la home
+    → responde al browser</code></pre>
+
+    <h3>Función Modal (Python)</h3>
+    <pre><code><span class="comment"># modal_worker.py (esquema simplificado)</span>
+<span class="kw">import</span> modal
+
+app = modal.App(<span class="str">"practica-piano"</span>)
+
+image = (
+    modal.Image.debian_slim()
+    .pip_install([<span class="str">"demucs"</span>, <span class="str">"yt-dlp"</span>, <span class="str">"boto3"</span>, <span class="str">"ffmpeg-python"</span>])
+    .apt_install([<span class="str">"ffmpeg"</span>])
+)
+
+<span class="kw">@app</span>.function(image=image, gpu=<span class="str">"T4"</span>, timeout=<span class="num">600</span>)
+<span class="kw">@modal</span>.web_endpoint(method=<span class="str">"POST"</span>)
+<span class="kw">def</span> <span class="fn">process_song</span>(body: dict):
+    <span class="comment"># 1. Descargar audio (URL temporal de R2 o YouTube)</span>
+    <span class="comment"># 2. Correr Demucs</span>
+    <span class="comment"># 3. Subir stems a R2 usando boto3 (S3-compatible)</span>
+    <span class="comment"># 4. Retornar { ok: True, songId: body["songId"] }</span>
+    ...</code></pre>
+
+    <h3>Timeout de Vercel — el problema más importante</h3>
+    <p>
+      Las funciones serverless de Vercel tienen límite de <strong>60 s (free tier) o 300 s (Pro)</strong>.
+      Demucs puede tardar 5-15 minutos en CPU o ~30-60 s en GPU. Hay dos estrategias:
+    </p>
+    <pre><code><span class="comment">// Opción A — Polling (recomendado para free tier Vercel)</span>
+POST /api/studio → retorna { jobId }  <span class="comment">// inmediato, menos de 5 s</span>
+Modal procesa en background
+Cliente hace polling a GET /api/studio/status?jobId=xxx cada 5 s
+Modal escribe songs/{songId}/_status.json en R2 cuando termina
+<span class="comment">// el cliente lee el status directamente desde R2</span>
+
+<span class="comment">// Opción B — SSE mantenido (requiere Vercel Pro o edge functions)</span>
+Modal con StreamingResponse emite logs → /api/studio los reenvía como SSE
+<span class="comment">// Igual al flujo actual con Python, pero con el worker en la nube</span></code></pre>
+
+    <div class="caveats">
+      <div class="caveats-title">⚑ Caveats de la Etapa 2</div>
+      <ul>
+        <li><strong>Cold start de Modal:</strong> la primera invocación puede tardar 30-60 s mientras baja la imagen Docker con Demucs (~3 GB). Las siguientes son mucho más rápidas. Comunicarlo al usuario en la UI del Studio.</li>
+        <li><strong>Subir MP3 del usuario antes de llamar a Modal:</strong> el browser sube a <code>/api/studio</code>, pero Vercel no puede pasar ese buffer directamente a Modal si la función serverless no tiene estado persistente. La solución es subir el MP3 a R2 en una ruta temporal (<code>tmp/{uuid}.mp3</code>) y pasarle la URL a Modal. Limpiar esa ruta temporal una vez que Modal termina.</li>
+        <li><strong>Credenciales de R2 en Modal:</strong> usar <code>modal.Secret.from_name("r2-credentials")</code> para no hardcodear las claves. No pasarlas en el body del request.</li>
+        <li><strong>Model de Demucs:</strong> <code>htdemucs_2stems</code> es el mismo que usa el script Python actual. Si se cambia el modelo, los paths de salida de Demucs cambian.</li>
+        <li><strong>yt-dlp en la nube:</strong> YouTube puede bloquear peticiones desde IPs de data centers. Puede ser necesario configurar un proxy o usar cookies autenticadas. Testear antes de dar por buena la feature.</li>
+        <li><strong>Sin SSE en Vercel free:</strong> con la Opción A de polling, el cliente pierde el log en tiempo real de las fases (downloading, separating, uploading). Mostrar un spinner genérico con el status del job es suficiente para empezar.</li>
+      </ul>
+    </div>
+
+    <h3>Archivos modificados</h3>
+    <table>
+      <tr><th>Archivo</th><th>Cambio</th></tr>
+      <tr><td>modal_worker.py</td><td><span class="badge badge-new">nuevo</span> Función Modal con Demucs + upload a R2</td></tr>
+      <tr><td>app/api/studio/route.ts</td><td><span class="badge badge-mod">mod</span> Reemplazar subprocess Python por fetch a Modal</td></tr>
+      <tr><td>app/api/studio/status/route.ts</td><td><span class="badge badge-new">nuevo</span> Polling de status (Opción A)</td></tr>
+      <tr><td>app/studio/StudioClient.tsx</td><td><span class="badge badge-mod">mod</span> Cambiar SSE por polling si se elige Opción A</td></tr>
+      <tr><td>scripts/add_song.py</td><td><span class="badge badge-del">archivar</span> Mantener como fallback local documentado</td></tr>
+    </table>
+
+    <h3>Verificación</h3>
+    <ul class="checklist">
+      <li>Subir un MP3 desde Studio → Modal procesa → stems aparecen en R2 → documento creado en Convex</li>
+      <li>Ingresar una URL de YouTube → misma verificación</li>
+      <li>La canción nueva aparece en la home sin refresh manual</li>
+      <li>Subir un PDF de acordes → aparece el panel de acordes en el player</li>
+      <li>Cold start: el spinner se muestra mientras Modal arranca</li>
+    </ul>
+  </section>
+
+  <hr />
+
+  <!-- ETAPA 3 -->
+  <section id="etapa-3" class="stage stage-3">
+    <div class="stage-header">
+      <div class="stage-number">3</div>
+      <div class="stage-header-text">
+        <h2>Autenticación y listas por usuario</h2>
+        <p>Convex Auth (o Clerk) + tabla <code>userLibrary</code> para listas personales.</p>
+      </div>
+    </div>
+
+    <h3>Modelo de datos — qué se agrega</h3>
+    <p>
+      El schema de la Etapa 1 ya tiene <code>isPublic</code> y <code>ownerId</code> preparados para esta
+      etapa. Solo se agrega la tabla <code>userLibrary</code> y se conecta la autenticación.
+    </p>
+
+    <div class="schema">
+<span class="comment">// convex/schema.ts — se agrega esto en Etapa 3</span>
+userLibrary: defineTable({
+  userId:  <span class="type">v.string()</span>,        <span class="comment">// Convex Auth identity subject</span>
+  songId:  <span class="type">v.id("songs")</span>,
+  addedAt: <span class="type">v.number()</span>,       <span class="comment">// Date.now()</span>
+})
+  .index(<span class="str">"by_user"</span>, [<span class="str">"userId"</span>])
+  .index(<span class="str">"by_user_and_song"</span>, [<span class="str">"userId"</span>, <span class="str">"songId"</span>])
+    </div>
+
+    <h3>Flujos de usuario</h3>
+    <pre><code><span class="comment">// Sin login — igual que hoy</span>
+Home → muestra catálogo público (listPublic)
+Player → carga metadata desde Convex, audio desde R2
+Markers/Regions → localStorage
+
+<span class="comment">// Con login</span>
+Home → muestra "Catálogo" + "Mi lista" (canciones guardadas + privadas)
+Player → igual que sin login
+"Guardar canción" → addToLibrary(userId, songId)
+Studio → canción subida se crea con ownerId=userId, isPublic=false
+"Publicar al catálogo" → (acción futura, solo admin o con moderación)</code></pre>
+
+    <h3>Opciones de autenticación</h3>
+    <p>
+      <strong>Convex Auth (recomendado):</strong> auth nativa de Convex, sin servicio externo.
+      Soporta Google OAuth, GitHub, magic links. Integra directamente con las queries — en cada
+      mutation se puede obtener <code>ctx.auth.getUserIdentity()</code>. Sin costo adicional.
+    </p>
+    <p>
+      <strong>Clerk:</strong> mejor UX de auth (componentes pre-construidos, más providers).
+      Tiene integración oficial con Convex via JWT. Agrega un servicio externo pero el free tier
+      es generoso (10K usuarios/mes).
+    </p>
+
+    <div class="caveats">
+      <div class="caveats-title">⚑ Caveats de la Etapa 3</div>
+      <ul>
+        <li><strong>Rutas públicas vs. protegidas:</strong> el catálogo público no debe requerir login para acceder — verificar que <code>listPublic</code> y <code>getBySlug</code> (para canciones públicas) no tengan guard de auth.</li>
+        <li><strong>Canciones privadas y URLs de R2:</strong> si un usuario sube una canción privada y el bucket de R2 es público, cualquiera con la URL puede acceder al MP3. Opciones: (a) bucket privado con URLs firmadas de corta duración, (b) aceptarlo como limitación inicial dado que las URLs no son predecibles.</li>
+        <li><strong>Migración de localStorage a Convex para el estado del player:</strong> si en el futuro se decide sincronizar markers/regions entre dispositivos, la tabla <code>userSongState</code> ya está diseñada para eso. No es necesario en esta etapa.</li>
+        <li><strong>Slugs de canciones privadas:</strong> si dos usuarios suben la misma canción, puede haber colisión de slugs. Agregar el <code>userId</code> como prefijo en el slug de canciones privadas: <code>{userId}-{slug}</code>.</li>
+        <li><strong>El Studio en producción:</strong> actualmente el Studio tiene un guard de desarrollo (<code>process.env.NODE_ENV === 'development'</code>). Con auth, el guard cambia a "solo usuarios autenticados" o "solo admin". Definir qué usuarios pueden agregar al catálogo público.</li>
+      </ul>
+    </div>
+
+    <h3>Archivos modificados</h3>
+    <table>
+      <tr><th>Archivo</th><th>Cambio</th></tr>
+      <tr><td>convex/schema.ts</td><td><span class="badge badge-mod">mod</span> Agregar tabla userLibrary</td></tr>
+      <tr><td>convex/userLibrary.ts</td><td><span class="badge badge-new">nuevo</span> addToLibrary, removeFromLibrary, listForUser</td></tr>
+      <tr><td>convex/songs.ts</td><td><span class="badge badge-mod">mod</span> listForUser (owned + saved), guards de acceso</td></tr>
+      <tr><td>app/layout.tsx</td><td><span class="badge badge-mod">mod</span> Agregar provider de auth</td></tr>
+      <tr><td>app/page.tsx</td><td><span class="badge badge-mod">mod</span> Mostrar sección "Mi lista" si hay sesión</td></tr>
+      <tr><td>components/SongList/SongCard.tsx</td><td><span class="badge badge-mod">mod</span> Botón "Guardar en mi lista"</td></tr>
+    </table>
+
+    <h3>Verificación</h3>
+    <ul class="checklist">
+      <li>Usuario no autenticado ve el catálogo público sin cambios</li>
+      <li>Login con Google/GitHub redirecciona de vuelta a la home</li>
+      <li>"Guardar" agrega la canción a userLibrary; aparece en "Mi lista" en la home</li>
+      <li>Canción privada (subida por el usuario) no aparece en el catálogo público</li>
+      <li>Otro usuario no puede acceder a la canción privada por slug</li>
+    </ul>
+  </section>
+
+</div>
+</body>
+</html>
