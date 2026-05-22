@@ -13,11 +13,16 @@ import type { SSEEvent } from '@/lib/types'
 const SONGS_DIR = path.join(process.cwd(), 'public', 'songs')
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
 
-export async function POST(req: NextRequest) {
-  const secret = process.env.STUDIO_SECRET
-  if (!secret || req.headers.get('x-studio-key') !== secret) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+function devOnly() {
+  if (process.env.NODE_ENV !== 'development') {
+    return NextResponse.json({ error: 'Only available in development' }, { status: 403 })
   }
+  return null
+}
+
+export async function POST(req: NextRequest) {
+  const guard = devOnly()
+  if (guard) return guard
 
   let formData: FormData
   try {
