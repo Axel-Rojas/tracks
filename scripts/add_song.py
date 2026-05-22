@@ -32,7 +32,6 @@ if hasattr(sys.stderr, 'buffer'):
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 REPO_ROOT = Path(__file__).parent.parent
-SONGS_JSON = REPO_ROOT / "public" / "songs.json"
 SONGS_DIR = REPO_ROOT / "public" / "songs"
 
 
@@ -195,21 +194,6 @@ def run_demucs(input_file: Path, out_dir: Path) -> Path:
     return stem_dir
 
 
-def id_exists(song_id: str) -> bool:
-    if not SONGS_JSON.exists():
-        return False
-    songs = json.loads(SONGS_JSON.read_text(encoding="utf-8"))
-    return any(s["id"] == song_id for s in songs)
-
-
-def prepend_to_songs_json(song_id: str, title: str, artist: str):
-    songs = json.loads(SONGS_JSON.read_text(encoding="utf-8")) if SONGS_JSON.exists() else []
-    # Remover entrada existente si se está sobreescribiendo
-    songs = [s for s in songs if s["id"] != song_id]
-    songs.insert(0, {"id": song_id, "title": title, "artist": artist})
-    SONGS_JSON.write_text(json.dumps(songs, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
 def write_metadata(song_dir: Path, song_id: str, title: str, artist: str, bpm: int | None):
     metadata = {
         "id": song_id,
@@ -250,11 +234,6 @@ def main():
         print("ERROR: No se pudo generar un ID válido del título. Usá --id.")
         sys.exit(1)
 
-    if id_exists(song_id) and not args.overwrite:
-        print(f"ERROR: Ya existe una canción con id '{song_id}'.")
-        print("  Usá --overwrite para reemplazarla, o --id para elegir otro ID.")
-        sys.exit(1)
-
     check_demucs()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -285,7 +264,6 @@ def main():
         shutil.copy2(no_vocals_src, song_dir / "Instrumental.mp3")
 
     write_metadata(song_dir, song_id, args.title, args.artist, args.bpm)
-    prepend_to_songs_json(song_id, args.title, args.artist)
 
     print(f"\nOK Cancion agregada exitosamente:")
     print(f"  ID:         {song_id}")

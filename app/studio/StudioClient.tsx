@@ -1,6 +1,8 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { useQuery } from 'convex/react'
+import { api } from '@/convex/_generated/api'
 import { X, ArrowLeft, Music, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import type { SSEEvent } from '@/lib/types'
@@ -28,6 +30,9 @@ const inputCls =
   'bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-green-500 w-full'
 
 export default function StudioClient() {
+  const songs = useQuery(api.songs.listPublic)
+  const artists = [...new Set((songs ?? []).map((s) => s.artist))].sort()
+
   const songInputRef = useRef<HTMLInputElement>(null)
   const chordsInputRef = useRef<HTMLInputElement>(null)
 
@@ -141,6 +146,15 @@ export default function StudioClient() {
         } else if (ev.type === 'done') {
           setResult({ ok: true, message: '', id: ev.id })
           setSaving(false)
+          setTitle('')
+          setArtist('')
+          setBpm('')
+          setId('')
+          setSongFile(null)
+          setChordsFile(null)
+          setYoutubeUrl('')
+          if (songInputRef.current) songInputRef.current.value = ''
+          if (chordsInputRef.current) chordsInputRef.current.value = ''
         } else if (ev.type === 'error') {
           setResult({ ok: false, message: ev.message })
           setSaving(false)
@@ -181,8 +195,12 @@ export default function StudioClient() {
                 placeholder="Queen"
                 value={artist}
                 onChange={(e) => setArtist(e.target.value)}
+                list="artists-list"
                 required
               />
+              <datalist id="artists-list">
+                {artists.map((a) => <option key={a} value={a} />)}
+              </datalist>
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">

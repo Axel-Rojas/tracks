@@ -1,7 +1,7 @@
 const CACHE_VERSION = 'v1'
 const SHELL_CACHE = `app-shell-${CACHE_VERSION}`
 
-const SHELL_ASSETS = ['/', '/songs.json', '/manifest.json', '/icon.svg']
+const SHELL_ASSETS = ['/', '/manifest.json', '/icon.svg']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
