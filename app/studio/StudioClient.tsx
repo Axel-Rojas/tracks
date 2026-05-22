@@ -27,7 +27,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputCls =
   'bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-green-500 w-full'
 
-export default function StudioClient() {
+export default function StudioClient({ studioKey }: { studioKey: string }) {
   const songInputRef = useRef<HTMLInputElement>(null)
   const chordsInputRef = useRef<HTMLInputElement>(null)
 
@@ -86,7 +86,7 @@ export default function StudioClient() {
 
     let res: Response
     try {
-      res = await fetch('/api/studio', { method: 'POST', body: fd })
+      res = await fetch('/api/studio', { method: 'POST', body: fd, headers: { 'x-studio-key': studioKey } })
     } catch {
       setResult({ ok: false, message: 'No se pudo conectar con /api/studio' })
       setSaving(false)
@@ -156,9 +156,6 @@ export default function StudioClient() {
           <ArrowLeft size={14} /> Volver
         </Link>
         <h1 className="text-2xl font-bold text-white">Studio</h1>
-        <span className="text-xs bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded-full font-mono">
-          dev only
-        </span>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
