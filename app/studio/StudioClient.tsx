@@ -1,11 +1,11 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { X, ArrowLeft, Music, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
-import type { SSEEvent } from '@/lib/types'
+import type { SSEEvent, JobStatus } from '@/lib/types'
 import { parseETA, inferPhase } from '@/lib/studio'
 
 function slugify(s: string) {
@@ -29,17 +29,19 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputCls =
   'bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-green-500 w-full'
 
-export default function StudioClient() {
+export default function StudioClient({ youtubeEnabled }: { youtubeEnabled: boolean }) {
   const songs = useQuery(api.songs.listPublic)
   const artists = [...new Set((songs ?? []).map((s) => s.artist))].sort()
 
   const songInputRef = useRef<HTMLInputElement>(null)
   const chordsInputRef = useRef<HTMLInputElement>(null)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [title, setTitle] = useState('')
   const [artist, setArtist] = useState('')
   const [bpm, setBpm] = useState('')
   const [id, setId] = useState('')
+  const [secret, setSecret] = useState('')
   const [songFile, setSongFile] = useState<File | null>(null)
   const [chordsFile, setChordsFile] = useState<File | null>(null)
   const [youtubeMode, setYoutubeMode] = useState(false)
@@ -51,15 +53,44 @@ export default function StudioClient() {
   const [lastLog, setLastLog] = useState('')
   const [result, setResult] = useState<{ ok: boolean; message: string; id?: string } | null>(null)
 
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current)
+    }
+  }, [])
+
   function handleTitleChange(value: string) {
     setTitle(value)
     if (!id || id === slugify(title)) setId(slugify(value))
+  }
+
+  function stopPolling() {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+  }
+
+  function resetForm() {
+    setTitle('')
+    setArtist('')
+    setBpm('')
+    setId('')
+    setSongFile(null)
+    setChordsFile(null)
+    setYoutubeUrl('')
+    if (songInputRef.current) songInputRef.current.value = ''
+    if (chordsInputRef.current) chordsInputRef.current.value = ''
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!id || !title || !artist) {
       setResult({ ok: false, message: 'Completá título, artista e ID.' })
+      return
+    }
+    if (!secret) {
+      setResult({ ok: false, message: 'Ingresá el token de acceso.' })
       return
     }
     if (youtubeMode && !youtubeUrl.trim()) {
@@ -72,15 +103,17 @@ export default function StudioClient() {
     }
 
     setSaving(true)
-    setPhase(youtubeMode ? 'Conectando con YouTube...' : 'Subiendo archivo...')
+    setPhase(youtubeMode ? 'Subiendo datos...' : 'Subiendo archivo a R2...')
     setProgress(null)
     setLastLog('')
     setResult(null)
+    stopPolling()
 
     const fd = new FormData()
     fd.append('id', id)
     fd.append('title', title)
     fd.append('artist', artist)
+    fd.append('secret', secret)
     if (bpm) fd.append('bpm', bpm)
     if (youtubeMode) {
       fd.append('youtubeUrl', youtubeUrl.trim())
@@ -98,69 +131,97 @@ export default function StudioClient() {
       return
     }
 
-    // Validation errors come back as JSON (non-streaming)
-    if (!res.headers.get('content-type')?.includes('text/event-stream')) {
+    // ── SSE path (dev) ────────────────────────────────────────────────────
+    if (res.headers.get('content-type')?.includes('text/event-stream')) {
+      setPhase('Iniciando Demucs...')
+
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        const events = buffer.split('\n\n')
+        buffer = events.pop() ?? ''
+
+        for (const event of events) {
+          const dataLine = event.split('\n').find((l) => l.startsWith('data: '))
+          if (!dataLine) continue
+          let ev: SSEEvent
+          try {
+            ev = JSON.parse(dataLine.slice(6)) as SSEEvent
+          } catch {
+            continue
+          }
+
+          if (ev.type === 'progress') {
+            setProgress(ev.pct)
+            setLastLog(parseETA(ev.text) ?? '')
+          } else if (ev.type === 'log') {
+            setLastLog(ev.text)
+            const newPhase = inferPhase(ev.text)
+            if (newPhase) {
+              setPhase(newPhase)
+              if (newPhase.includes('Separando') || newPhase.includes('Descargando')) {
+                setProgress(null)
+              }
+            }
+          } else if (ev.type === 'done') {
+            setResult({ ok: true, message: '', id: ev.id })
+            setSaving(false)
+            resetForm()
+          } else if (ev.type === 'error') {
+            setResult({ ok: false, message: ev.message })
+            setSaving(false)
+          }
+        }
+      }
+      return
+    }
+
+    // ── Polling path (prod) ───────────────────────────────────────────────
+    if (!res.ok) {
       const data = (await res.json()) as { error?: string }
       setResult({ ok: false, message: data.error ?? 'Error desconocido' })
       setSaving(false)
       return
     }
 
-    // Read SSE stream
-    const reader = res.body!.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
+    const { jobId } = (await res.json()) as { jobId: string }
+    setPhase('Esperando inicio en Modal...')
+    setLastLog('Cold start puede tardar ~30s la primera vez')
 
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
+    pollingRef.current = setInterval(async () => {
+      try {
+        const statusRes = await fetch(`/api/studio/status?jobId=${jobId}`)
+        if (!statusRes.ok) return
+        const status = (await statusRes.json()) as JobStatus
 
-      // Process complete SSE events (separated by \n\n)
-      const events = buffer.split('\n\n')
-      buffer = events.pop() ?? ''
-
-      for (const event of events) {
-        const dataLine = event.split('\n').find((l) => l.startsWith('data: '))
-        if (!dataLine) continue
-        let ev: SSEEvent
-        try {
-          ev = JSON.parse(dataLine.slice(6)) as SSEEvent
-        } catch {
-          continue
-        }
-
-        if (ev.type === 'progress') {
-          setProgress(ev.pct)
-          setLastLog(parseETA(ev.text) ?? '')
-        } else if (ev.type === 'log') {
-          setLastLog(ev.text)
-          const newPhase = inferPhase(ev.text)
-          if (newPhase) {
-            setPhase(newPhase)
-            // Reset progress bar when phase changes (e.g. download → separation)
-            if (newPhase.includes('Separando') || newPhase.includes('Descargando')) {
-              setProgress(null)
-            }
+        if (status.status === 'pending') {
+          setPhase('Esperando inicio en Modal...')
+        } else if (status.status === 'running') {
+          setPhase(status.phase ?? 'Procesando...')
+          if (status.progress !== undefined) {
+            setProgress(status.progress)
+            setLastLog('')
           }
-        } else if (ev.type === 'done') {
-          setResult({ ok: true, message: '', id: ev.id })
+        } else if (status.status === 'done') {
+          stopPolling()
+          setResult({ ok: true, message: '', id: status.id })
           setSaving(false)
-          setTitle('')
-          setArtist('')
-          setBpm('')
-          setId('')
-          setSongFile(null)
-          setChordsFile(null)
-          setYoutubeUrl('')
-          if (songInputRef.current) songInputRef.current.value = ''
-          if (chordsInputRef.current) chordsInputRef.current.value = ''
-        } else if (ev.type === 'error') {
-          setResult({ ok: false, message: ev.message })
+          resetForm()
+        } else if (status.status === 'error') {
+          stopPolling()
+          setResult({ ok: false, message: status.message })
           setSaving(false)
         }
+      } catch {
+        // ignore transient polling errors
       }
-    }
+    }, 10000)
   }
 
   return (
@@ -170,9 +231,6 @@ export default function StudioClient() {
           <ArrowLeft size={14} /> Volver
         </Link>
         <h1 className="text-2xl font-bold text-white">Studio</h1>
-        <span className="text-xs bg-yellow-900 text-yellow-300 px-2 py-0.5 rounded-full font-mono">
-          dev only
-        </span>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
@@ -232,23 +290,24 @@ export default function StudioClient() {
         <section className="flex flex-col gap-3 p-4 bg-zinc-800/50 rounded-xl border border-zinc-700">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-zinc-300">Canción</h2>
-            {/* Mode toggle */}
-            <div className="flex rounded-lg overflow-hidden border border-zinc-700 text-xs">
-              <button
-                type="button"
-                onClick={() => setYoutubeMode(false)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${!youtubeMode ? 'bg-zinc-600 text-white' : 'text-zinc-400 hover:text-zinc-300'}`}
-              >
-                <Music size={12} /> MP3
-              </button>
-              <button
-                type="button"
-                onClick={() => setYoutubeMode(true)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${youtubeMode ? 'bg-red-700 text-white' : 'text-zinc-400 hover:text-zinc-300'}`}
-              >
-                <ExternalLink size={12} /> YouTube
-              </button>
-            </div>
+            {youtubeEnabled && (
+              <div className="flex rounded-lg overflow-hidden border border-zinc-700 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setYoutubeMode(false)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${!youtubeMode ? 'bg-zinc-600 text-white' : 'text-zinc-400 hover:text-zinc-300'}`}
+                >
+                  <Music size={12} /> MP3
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setYoutubeMode(true)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${youtubeMode ? 'bg-red-700 text-white' : 'text-zinc-400 hover:text-zinc-300'}`}
+                >
+                  <ExternalLink size={12} /> YouTube
+                </button>
+              </div>
+            )}
           </div>
           <p className="text-xs text-zinc-500">
             Demucs va a separar la pista en{' '}
@@ -331,6 +390,20 @@ export default function StudioClient() {
               Seleccionar PDF...
             </button>
           )}
+        </section>
+
+        {/* Access token */}
+        <section className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700">
+          <Field label="Token de acceso">
+            <input
+              type="password"
+              className={inputCls}
+              placeholder="••••••••"
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              required
+            />
+          </Field>
         </section>
 
         {/* Submit */}
