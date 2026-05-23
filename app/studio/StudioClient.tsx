@@ -298,29 +298,17 @@ export default function StudioClient({ youtubeEnabled, isDev }: { youtubeEnabled
               </datalist>
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="ID (slug)">
-              <input
-                className={inputCls}
-                placeholder="bohemian-rhapsody"
-                value={id}
-                onChange={(e) => setId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
-                pattern="[a-z0-9-]+"
-                required
-              />
-            </Field>
-            <Field label="BPM (opcional)">
-              <input
-                className={inputCls}
-                type="number"
-                placeholder="120"
-                value={bpm}
-                onChange={(e) => setBpm(e.target.value)}
-                min={1}
-                max={300}
-              />
-            </Field>
-          </div>
+          <Field label="BPM (opcional)">
+            <input
+              className={inputCls}
+              type="number"
+              placeholder="120"
+              value={bpm}
+              onChange={(e) => setBpm(e.target.value)}
+              min={1}
+              max={300}
+            />
+          </Field>
         </section>
 
         {/* Song */}
