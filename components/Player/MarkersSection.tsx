@@ -67,14 +67,17 @@ export default function MarkersSection({
     <>
       <div className="border-t border-zinc-800 flex-shrink-0">
         {/* Toggle bar */}
-        <button
-          onClick={onToggle}
-          className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-zinc-800/50 active:bg-zinc-800 touch-manipulation transition-colors"
-          aria-expanded={isOpen}
-        >
-          <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest flex-1 text-left">
-            Marcadores{totalCount > 0 ? ` (${totalCount})` : ''}
-          </span>
+        <div className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-zinc-800/50 active:bg-zinc-800 touch-manipulation transition-colors">
+          <button
+            onClick={onToggle}
+            className="flex items-center gap-2 flex-1 text-left"
+            aria-expanded={isOpen}
+          >
+            <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest flex-1 text-left">
+              Marcadores{totalCount > 0 ? ` (${totalCount})` : ''}
+            </span>
+            <span className="text-zinc-600">{isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
+          </button>
           <button
             onClick={(e) => { e.stopPropagation(); onToggleVisible() }}
             className="h-9 w-9 flex items-center justify-center text-zinc-600 hover:text-zinc-300 touch-manipulation transition-colors"
@@ -82,8 +85,7 @@ export default function MarkersSection({
           >
             {visible ? <Eye size={14} /> : <EyeOff size={14} />}
           </button>
-          <span className="text-zinc-600">{isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
-        </button>
+        </div>
 
         {/* Marker chips */}
         {isOpen && (
