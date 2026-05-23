@@ -1,8 +1,8 @@
 import { mutation, query } from "./_generated/server"
 import { v } from "convex/values"
 
-function toSlug(title: string, artist: string): string {
-  return `${title} ${artist}`
+function slugify(text: string): string {
+  return text
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{Mn}/gu, "")
@@ -48,7 +48,7 @@ export const getBySlug = query({
   },
 })
 
-// Used by the public add-song interface. Generates slug from title+artist.
+// Used by the public add-song interface. Generates slug from title; appends artist on collision.
 export const create = mutation({
   args: {
     title: v.string(),
@@ -70,16 +70,24 @@ export const create = mutation({
       throw new Error(`"${args.title}" de "${args.artist}" ya existe`)
     }
 
-    const base = toSlug(args.title, args.artist)
+    const base = slugify(args.title)
     let slug = base
-    let suffix = 2
-    while (
+    if (
       await ctx.db
         .query("songs")
         .withIndex("by_slug", (q) => q.eq("slug", slug))
         .unique()
     ) {
-      slug = `${base}-${suffix++}`
+      slug = `${base}-${slugify(args.artist)}`
+      let suffix = 2
+      while (
+        await ctx.db
+          .query("songs")
+          .withIndex("by_slug", (q) => q.eq("slug", slug))
+          .unique()
+      ) {
+        slug = `${base}-${slugify(args.artist)}-${suffix++}`
+      }
     }
 
     return ctx.db.insert("songs", { ...args, slug })
