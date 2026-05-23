@@ -3,7 +3,7 @@ import { api } from '@/convex/_generated/api'
 import type { SongIndex } from '@/lib/types'
 import SongListClient from '@/components/SongList/SongListClient'
 
-export const revalidate = 3600
+// export const revalidate = 3600
 
 export default async function HomePage() {
   let songs: SongIndex[] = []

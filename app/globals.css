@@ -20,10 +20,6 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Slider vertical para mixer */
-input[type='range'][style*='writing-mode'] {
-  -webkit-appearance: slider-vertical;
-}
 
 /* Scrollbar oscura */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
