@@ -6,7 +6,7 @@ export default async function StudioPage({
   searchParams: Promise<{ key?: string }>
 }) {
   const { key } = await searchParams
-  const youtubeEnabled =
-    process.env.NODE_ENV === 'development' || key === process.env.STUDIO_SECRET
-  return <StudioClient youtubeEnabled={youtubeEnabled} />
+  const isDev = process.env.NODE_ENV === 'development'
+  const youtubeEnabled = isDev || key === process.env.STUDIO_SECRET
+  return <StudioClient youtubeEnabled={youtubeEnabled} isDev={isDev} />
 }

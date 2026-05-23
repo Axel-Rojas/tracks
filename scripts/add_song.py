@@ -237,6 +237,7 @@ def register_in_convex(song_id: str, title: str, artist: str, bpm: int | None):
         {"id": "voz",           "label": "Voz",           "file": f"songs/{song_id}/vocals.mp3",   "defaultVolume": 0.5},
     ]
     args = {
+        "slug": song_id,
         "title": title,
         "artist": artist,
         "isPublic": True,
@@ -245,7 +246,7 @@ def register_in_convex(song_id: str, title: str, artist: str, bpm: int | None):
     if bpm is not None:
         args["bpm"] = bpm
 
-    body = json.dumps({"path": "songs:create", "args": args, "format": "json"}).encode()
+    body = json.dumps({"path": "songs:seed", "args": args, "format": "json"}).encode()
     req = urllib.request.Request(
         f"{convex_url}/api/mutation",
         data=body,
@@ -258,7 +259,7 @@ def register_in_convex(song_id: str, title: str, artist: str, bpm: int | None):
             if result.get("status") == "error":
                 print(f"ERROR Convex: {result.get('errorMessage', result)}")
                 sys.exit(1)
-            print(f"  ✓  Registrada en Convex (slug generado automáticamente)")
+            print(f"  ✓  Registrada en Convex con slug: {song_id}")
     except urllib.error.HTTPError as e:
         body_err = e.read().decode(errors='replace')
         print(f"ERROR al registrar en Convex: {e.code} {body_err}")

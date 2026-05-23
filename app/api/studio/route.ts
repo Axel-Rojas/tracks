@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
-import { writeFile, rm, readFile } from 'fs/promises'
+import { writeFile, rm } from 'fs/promises'
 import { spawn } from 'child_process'
 import path from 'path'
 import os from 'os'
 import crypto from 'crypto'
 import { uploadToR2 } from '@/lib/r2'
 import type { SSEEvent } from '@/lib/types'
-
-const SONGS_DIR = path.join(process.cwd(), 'public', 'songs')
 
 export async function POST(req: NextRequest) {
   let formData: FormData
@@ -18,9 +16,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid form data' }, { status: 400 })
   }
 
-  const secret = (formData.get('secret') as string | null)?.trim()
-  if (!process.env.STUDIO_SECRET || secret !== process.env.STUDIO_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (process.env.NODE_ENV !== 'development') {
+    const secret = (formData.get('secret') as string | null)?.trim()
+    if (!process.env.STUDIO_SECRET || secret !== process.env.STUDIO_SECRET) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
   }
 
   const slug = (formData.get('id') as string | null)?.trim()
@@ -47,15 +47,9 @@ export async function POST(req: NextRequest) {
   // ── Dev path: spawn local Python script, stream SSE ──────────────────────
   if (process.env.NODE_ENV === 'development') {
     let songBuffer: Buffer | null = null
-    let chordsBuffer: Buffer | null = null
-    let chordsFileName: string | null = null
 
     try {
       if (songFile) songBuffer = Buffer.from(await songFile.arrayBuffer())
-      if (chordsFile instanceof File && chordsFile.size > 0) {
-        chordsBuffer = Buffer.from(await chordsFile.arrayBuffer())
-        chordsFileName = chordsFile.name
-      }
     } catch {
       return NextResponse.json({ error: 'Error leyendo los archivos' }, { status: 500 })
     }
@@ -65,7 +59,6 @@ export async function POST(req: NextRequest) {
       '--title', title,
       '--artist', artist,
       '--id', slug,
-      '--overwrite',
       ...(bpm !== undefined ? ['--bpm', String(bpm)] : []),
       ...(youtubeUrl ? ['--youtube-url', youtubeUrl] : []),
     ]
@@ -122,51 +115,6 @@ export async function POST(req: NextRequest) {
             controller.close()
             return
           }
-
-          // Upload stems to R2
-          try {
-            const vozBuf = await readFile(path.join(SONGS_DIR, slug!, 'Voz.mp3'))
-            const instrBuf = await readFile(path.join(SONGS_DIR, slug!, 'Instrumental.mp3'))
-            await uploadToR2(`songs/${slug}/Voz.mp3`, vozBuf, 'audio/mpeg')
-            await uploadToR2(`songs/${slug}/Instrumental.mp3`, instrBuf, 'audio/mpeg')
-          } catch (err) {
-            send({ type: 'error', message: `Error subiendo pistas a R2: ${String(err)}` })
-            controller.close()
-            return
-          }
-
-          // Handle optional chords PDF
-          let chordsKey: string | undefined
-          if (chordsBuffer && chordsFileName) {
-            try {
-              chordsKey = `songs/${slug}/${path.basename(chordsFileName)}`
-              await uploadToR2(chordsKey, chordsBuffer, 'application/pdf')
-            } catch { /* non-fatal */ }
-          }
-
-          // Seed Convex
-          try {
-            await fetch(`${process.env.NEXT_PUBLIC_CONVEX_URL}/api/mutation`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                path: 'songs:seed',
-                args: {
-                  title,
-                  artist,
-                  slug,
-                  ...(bpm !== undefined && { bpm }),
-                  isPublic: true,
-                  ...(chordsKey && { chordsFile: chordsKey }),
-                  tracks: [
-                    { id: 'instrumental', label: 'Instrumental', file: `songs/${slug}/Instrumental.mp3`, defaultVolume: 0.5 },
-                    { id: 'voz', label: 'Voz', file: `songs/${slug}/Voz.mp3`, defaultVolume: 0.5 },
-                  ],
-                },
-                format: 'json',
-              }),
-            })
-          } catch { /* non-fatal */ }
 
           revalidatePath('/', 'page')
           revalidatePath('/songs/[slug]', 'page')

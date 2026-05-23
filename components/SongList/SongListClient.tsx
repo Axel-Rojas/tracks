@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Search } from 'lucide-react'
+import Link from 'next/link'
+import { Search, Plus } from 'lucide-react'
 import type { SongIndex } from '@/lib/types'
 import SongCard from './SongCard'
 
@@ -62,6 +63,14 @@ export default function SongListClient({ songs }: { songs: SongIndex[] }) {
             </button>
           ))}
         </div>
+
+        <Link
+          href="/studio"
+          className="flex items-center justify-center h-10 w-10 rounded-xl bg-green-600 hover:bg-green-500 active:bg-green-700 transition-colors flex-shrink-0 touch-manipulation"
+          title="Agregar canción"
+        >
+          <Plus size={20} className="text-white" />
+        </Link>
       </div>
 
       {/* Results count */}

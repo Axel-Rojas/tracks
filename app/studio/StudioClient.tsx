@@ -29,7 +29,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputCls =
   'bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-green-500 w-full'
 
-export default function StudioClient({ youtubeEnabled }: { youtubeEnabled: boolean }) {
+export default function StudioClient({ youtubeEnabled, isDev }: { youtubeEnabled: boolean; isDev: boolean }) {
   const songs = useQuery(api.songs.listPublic)
   const artists = [...new Set((songs ?? []).map((s) => s.artist))].sort()
 
@@ -87,10 +87,6 @@ export default function StudioClient({ youtubeEnabled }: { youtubeEnabled: boole
     e.preventDefault()
     if (!id || !title || !artist) {
       setResult({ ok: false, message: 'Completá título, artista e ID.' })
-      return
-    }
-    if (!secret) {
-      setResult({ ok: false, message: 'Ingresá el token de acceso.' })
       return
     }
     if (youtubeMode && !youtubeUrl.trim()) {
@@ -392,19 +388,21 @@ export default function StudioClient({ youtubeEnabled }: { youtubeEnabled: boole
           )}
         </section>
 
-        {/* Access token */}
-        <section className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700">
-          <Field label="Token de acceso">
-            <input
-              type="password"
-              className={inputCls}
-              placeholder="••••••••"
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              required
-            />
-          </Field>
-        </section>
+        {/* Access token — solo en prod */}
+        {!isDev && (
+          <section className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700">
+            <Field label="Token de acceso">
+              <input
+                type="password"
+                className={inputCls}
+                placeholder="••••••••"
+                value={secret}
+                onChange={(e) => setSecret(e.target.value)}
+                required
+              />
+            </Field>
+          </section>
+        )}
 
         {/* Submit */}
         <div className="flex flex-col gap-3">
