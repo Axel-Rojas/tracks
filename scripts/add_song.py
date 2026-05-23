@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """
-Agrega una canción al proyecto separando sus pistas con Demucs.
+Agrega una canción al proyecto: separa pistas con Demucs, sube a R2 y registra en Convex.
 
 Uso:
     python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista"
     python scripts/add_song.py --youtube-url "https://youtu.be/..." --title "Nombre" --artist "Artista"
     python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista" --bpm 120
-    python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista" --id mi-id
-    python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista" --overwrite
 
 Requiere:
-    pip install demucs yt-dlp
+    pip install demucs yt-dlp boto3
     ffmpeg instalado en el PATH (winget install ffmpeg)
+
+Variables de entorno (en .env.local o exportadas):
+    CF_ACCOUNT_ID
+    CF_R2_ACCESS_KEY_ID
+    CF_R2_SECRET_ACCESS_KEY
+    NEXT_PUBLIC_CONVEX_URL
 """
 
 import argparse
@@ -23,6 +27,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.request
 from pathlib import Path
 
 # Forzar UTF-8 en stdout/stderr para evitar errores cp1252 en Windows
@@ -32,7 +37,31 @@ if hasattr(sys.stderr, 'buffer'):
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 REPO_ROOT = Path(__file__).parent.parent
-SONGS_DIR = REPO_ROOT / "public" / "songs"
+R2_BUCKET = 'tracks-app'
+
+
+def load_env():
+    """Lee .env.local del repo y carga variables en el entorno si no están ya definidas."""
+    env_file = REPO_ROOT / '.env.local'
+    if not env_file.exists():
+        return
+    for line in env_file.read_text(encoding='utf-8').splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, _, val = line.partition('=')
+        key = key.strip()
+        val = val.strip().strip('"').strip("'")
+        if key not in os.environ:
+            os.environ[key] = val
+
+
+def require_env(*names: str):
+    missing = [n for n in names if not os.environ.get(n)]
+    if missing:
+        print(f"ERROR: Faltan variables de entorno: {', '.join(missing)}")
+        print("  Definílas en .env.local o exportálas antes de correr el script.")
+        sys.exit(1)
 
 
 def slugify(text: str) -> str:
@@ -48,7 +77,6 @@ def slugify(text: str) -> str:
 
 
 def find_ffmpeg() -> str:
-    """Encuentra el ejecutable de ffmpeg — busca en PATH y ubicaciones comunes de Windows."""
     found = shutil.which("ffmpeg")
     if found:
         return found
@@ -61,7 +89,6 @@ def find_ffmpeg() -> str:
     if local:
         candidates.append(os.path.join(local, r"Microsoft\WinGet\Links\ffmpeg.exe"))
         candidates.append(os.path.join(local, r"Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-7.1-full_build\bin\ffmpeg.exe"))
-    # Scoop
     user = os.environ.get("USERPROFILE", "")
     if user:
         candidates.append(os.path.join(user, r"scoop\shims\ffmpeg.exe"))
@@ -70,23 +97,26 @@ def find_ffmpeg() -> str:
             return c
     print("ERROR: ffmpeg no encontrado.")
     print("  Instala ffmpeg con:  winget install ffmpeg")
-    print("  Luego reinicia la terminal y vuelve a correr el servidor de dev.")
     sys.exit(1)
 
 
 def check_demucs():
-    result = subprocess.run(
-        [sys.executable, "-c", "import demucs"],
-        capture_output=True,
-    )
+    result = subprocess.run([sys.executable, "-c", "import demucs"], capture_output=True)
     if result.returncode != 0:
         print("ERROR: Demucs no está instalado.")
         print("  Instalalo con: pip install demucs")
         sys.exit(1)
 
 
+def check_boto3():
+    result = subprocess.run([sys.executable, "-c", "import boto3"], capture_output=True)
+    if result.returncode != 0:
+        print("ERROR: boto3 no está instalado.")
+        print("  Instalalo con: pip install boto3")
+        sys.exit(1)
+
+
 def download_from_youtube(url: str, out_dir: Path) -> Path:
-    """Descarga audio de YouTube como WAV a 44100 Hz usando yt-dlp."""
     try:
         import yt_dlp
     except ImportError:
@@ -122,7 +152,6 @@ def download_from_youtube(url: str, out_dir: Path) -> Path:
 
 
 def sanitize_filename(p: Path) -> Path:
-    """Renombra el archivo a un nombre ASCII-seguro para evitar UnicodeEncodeError en Demucs."""
     safe = p.stem.encode("ascii", "ignore").decode("ascii").strip()
     safe = re.sub(r"[^\w\s-]", "", safe).strip() or "track"
     if safe == p.stem:
@@ -134,7 +163,6 @@ def sanitize_filename(p: Path) -> Path:
 
 def run_demucs(input_file: Path, out_dir: Path) -> Path:
     ffmpeg = find_ffmpeg()
-    # Inyectar el directorio de ffmpeg en PATH para que Demucs también lo encuentre
     ffmpeg_dir = str(Path(ffmpeg).parent)
     env = {
         **os.environ,
@@ -143,17 +171,13 @@ def run_demucs(input_file: Path, out_dir: Path) -> Path:
     }
 
     if input_file.suffix.lower() == ".wav":
-        # Ya es WAV (ej: descargado desde YouTube) — Demucs lo puede leer directamente
         wav_file = sanitize_filename(input_file)
     else:
-        # torchaudio en Python 3.13+ no puede cargar MP3 sin torchcodec.
-        # Convertir a WAV con ffmpeg evita el problema.
         wav_file = out_dir / (input_file.stem + ".wav")
         print("\n>> Convirtiendo a WAV...")
         conv = subprocess.run(
             [ffmpeg, "-i", str(input_file), "-ar", "44100", "-ac", "2", str(wav_file), "-y"],
-            capture_output=True,
-            text=True,
+            capture_output=True, text=True,
         )
         if conv.returncode != 0:
             print(f"ERROR: ffmpeg fallo al convertir el archivo.\n{conv.stderr}")
@@ -162,15 +186,8 @@ def run_demucs(input_file: Path, out_dir: Path) -> Path:
 
     print("\n>> Separando pistas con Demucs (puede tardar varios minutos)...")
     result = subprocess.run(
-        [
-            sys.executable, "-m", "demucs",
-            "--two-stems=vocals",
-            "--mp3",
-            "--out", str(out_dir),
-            str(wav_file),
-        ],
-        text=True,
-        env=env,
+        [sys.executable, "-m", "demucs", "--two-stems=vocals", "--mp3", "--out", str(out_dir), str(wav_file)],
+        text=True, env=env,
     )
     if result.returncode != 0:
         print("ERROR: Demucs fallo.")
@@ -178,8 +195,6 @@ def run_demucs(input_file: Path, out_dir: Path) -> Path:
 
     stem_base = wav_file.stem
     stem_dir = out_dir / "htdemucs_2stems" / stem_base
-
-    # Fallback: buscar el primer subdirectorio si el nombre no coincide exactamente
     if not stem_dir.exists():
         model_dirs = list(out_dir.glob("htdemucs*"))
         if not model_dirs:
@@ -194,47 +209,86 @@ def run_demucs(input_file: Path, out_dir: Path) -> Path:
     return stem_dir
 
 
-def write_metadata(song_dir: Path, song_id: str, title: str, artist: str, bpm: int | None):
-    metadata = {
-        "id": song_id,
+def upload_to_r2(local_path: Path, key: str):
+    import boto3
+    account_id = os.environ['CF_ACCOUNT_ID']
+    s3 = boto3.client(
+        's3',
+        region_name='auto',
+        endpoint_url=f'https://{account_id}.r2.cloudflarestorage.com',
+        aws_access_key_id=os.environ['CF_R2_ACCESS_KEY_ID'],
+        aws_secret_access_key=os.environ['CF_R2_SECRET_ACCESS_KEY'],
+    )
+    print(f"  ↑  Subiendo {key}...")
+    s3.upload_file(
+        str(local_path), R2_BUCKET, key,
+        ExtraArgs={
+            'ContentType': 'audio/mpeg',
+            'CacheControl': 'public, max-age=31536000, immutable',
+        },
+    )
+    print(f"  ✓  {key}")
+
+
+def register_in_convex(song_id: str, title: str, artist: str, bpm: int | None):
+    convex_url = os.environ['NEXT_PUBLIC_CONVEX_URL'].rstrip('/')
+    tracks = [
+        {"id": "instrumental", "label": "Instrumental", "file": f"songs/{song_id}/no_vocals.mp3", "defaultVolume": 0.5},
+        {"id": "voz",           "label": "Voz",           "file": f"songs/{song_id}/vocals.mp3",   "defaultVolume": 0.5},
+    ]
+    args = {
         "title": title,
         "artist": artist,
-        "tracks": [
-            {"id": "instrumental", "label": "Instrumental", "file": "Instrumental.mp3", "defaultVolume": 0.5},
-            {"id": "voz", "label": "Voz", "file": "Voz.mp3", "defaultVolume": 0.5},
-        ],
-        "markers": [],
-        "regions": [],
+        "isPublic": True,
+        "tracks": tracks,
     }
     if bpm is not None:
-        metadata["bpm"] = bpm
+        args["bpm"] = bpm
 
-    (song_dir / "metadata.json").write_text(
-        json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
+    body = json.dumps({"path": "songs:create", "args": args, "format": "json"}).encode()
+    req = urllib.request.Request(
+        f"{convex_url}/api/mutation",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
     )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read())
+            if result.get("status") == "error":
+                print(f"ERROR Convex: {result.get('errorMessage', result)}")
+                sys.exit(1)
+            print(f"  ✓  Registrada en Convex (slug generado automáticamente)")
+    except urllib.error.HTTPError as e:
+        body_err = e.read().decode(errors='replace')
+        print(f"ERROR al registrar en Convex: {e.code} {body_err}")
+        sys.exit(1)
 
 
 def main():
+    load_env()
+
     parser = argparse.ArgumentParser(description="Agrega una canción separando sus pistas con Demucs.")
     parser.add_argument("input", nargs="?", default=None, help="Archivo de audio de entrada (MP3 o WAV)")
     parser.add_argument("--youtube-url", default=None, help="URL de YouTube para descargar el audio")
     parser.add_argument("--title", required=True, help="Título de la canción")
     parser.add_argument("--artist", required=True, help="Artista")
     parser.add_argument("--bpm", type=int, default=None, help="BPM (opcional)")
-    parser.add_argument("--id", dest="song_id", default=None, help="ID/slug manual (default: slug del título)")
-    parser.add_argument("--overwrite", action="store_true", help="Sobreescribir si el ID ya existe")
+    parser.add_argument("--id", dest="song_id", default=None, help="ID/slug de R2 (default: slug del título)")
     args = parser.parse_args()
 
     if not args.input and not args.youtube_url:
         print("ERROR: Debés proveer un archivo de entrada o --youtube-url.")
         sys.exit(1)
 
+    require_env("CF_ACCOUNT_ID", "CF_R2_ACCESS_KEY_ID", "CF_R2_SECRET_ACCESS_KEY", "NEXT_PUBLIC_CONVEX_URL")
+    check_demucs()
+    check_boto3()
+
     song_id = args.song_id or slugify(args.title)
     if not song_id:
         print("ERROR: No se pudo generar un ID válido del título. Usá --id.")
         sys.exit(1)
-
-    check_demucs()
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -251,29 +305,23 @@ def main():
 
         vocals_src = stem_dir / "vocals.mp3"
         no_vocals_src = stem_dir / "no_vocals.mp3"
-
         if not vocals_src.exists() or not no_vocals_src.exists():
-            print(f"ERROR: No se encontraron los archivos de stems en {stem_dir}")
+            print(f"ERROR: No se encontraron los stems en {stem_dir}")
             print(f"  Contenido: {list(stem_dir.iterdir())}")
             sys.exit(1)
 
-        song_dir = SONGS_DIR / song_id
-        song_dir.mkdir(parents=True, exist_ok=True)
+        print("\n>> Subiendo pistas a R2...")
+        upload_to_r2(no_vocals_src, f"songs/{song_id}/no_vocals.mp3")
+        upload_to_r2(vocals_src,    f"songs/{song_id}/vocals.mp3")
 
-        shutil.copy2(vocals_src, song_dir / "Voz.mp3")
-        shutil.copy2(no_vocals_src, song_dir / "Instrumental.mp3")
+    print("\n>> Registrando en Convex...")
+    register_in_convex(song_id, args.title, args.artist, args.bpm)
 
-    write_metadata(song_dir, song_id, args.title, args.artist, args.bpm)
-
-    print(f"\nOK Cancion agregada exitosamente:")
-    print(f"  ID:         {song_id}")
-    print(f"  Directorio: public/songs/{song_id}/")
-    print(f"  Pistas:     Voz.mp3, Instrumental.mp3")
+    print(f"\n✓ Canción lista:")
+    print(f"  Título:  {args.title} — {args.artist}")
+    print(f"  R2 key:  songs/{song_id}/")
     if args.bpm:
-        print(f"  BPM:        {args.bpm}")
-    print(f"\nPróximos pasos:")
-    print(f"  git add public/songs/{song_id} public/songs.json")
-    print(f"  git commit -m 'feat: add {args.title} by {args.artist}'")
+        print(f"  BPM:     {args.bpm}")
 
 
 if __name__ == "__main__":
