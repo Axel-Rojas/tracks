@@ -46,25 +46,28 @@ def _write_status(s3, job_id: str, data: dict) -> None:
 def _seed_convex(convex_url: str, title: str, artist: str, slug: str, bpm, chords_key, tracks: list) -> None:
     import requests as req
 
+    args = {
+        "title": title,
+        "artist": artist,
+        "slug": slug,
+        "isPublic": True,
+        "tracks": tracks,
+    }
+    if bpm is not None:
+        args["bpm"] = bpm
+    if chords_key is not None:
+        args["chordsFile"] = chords_key
+
     res = req.post(
         f"{convex_url}/api/mutation",
-        json={
-            "path": "songs:seed",
-            "args": {
-                "title": title,
-                "artist": artist,
-                "slug": slug,
-                "bpm": bpm,
-                "isPublic": True,
-                "chordsFile": chords_key,
-                "tracks": tracks,
-            },
-            "format": "json",
-        },
+        json={"path": "songs:seed", "args": args, "format": "json"},
         headers={"Content-Type": "application/json"},
         timeout=30,
     )
     res.raise_for_status()
+    data = res.json()
+    if data.get("status") == "error":
+        raise RuntimeError(f"Convex error: {data.get('errorMessage', data)}")
 
 
 @app.function(
