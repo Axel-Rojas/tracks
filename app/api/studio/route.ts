@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { writeFile, rm, readFile } from 'fs/promises'
 import { spawn } from 'child_process'
 import path from 'path'
@@ -167,6 +168,8 @@ export async function POST(req: NextRequest) {
             })
           } catch { /* non-fatal */ }
 
+          revalidatePath('/', 'page')
+          revalidatePath('/songs/[slug]', 'page')
           send({ type: 'done', id: slug! })
           controller.close()
         })
