@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 export const R2_BUCKET = 'tracks-app'
 
@@ -20,6 +21,14 @@ export async function uploadToR2(key: string, data: Buffer, contentType: string,
       ContentType: contentType,
       CacheControl: cacheControl,
     })
+  )
+}
+
+export async function getPresignedUploadUrl(key: string, contentType: string, expiresIn = 900): Promise<string> {
+  return getSignedUrl(
+    r2,
+    new PutObjectCommand({ Bucket: R2_BUCKET, Key: key, ContentType: contentType }),
+    { expiresIn },
   )
 }
 

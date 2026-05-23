@@ -105,16 +105,57 @@ export default function StudioClient({ youtubeEnabled, isDev }: { youtubeEnabled
     setResult(null)
     stopPolling()
 
+    // In prod with an MP3, upload directly to R2 via presigned URL to bypass Vercel's 4.5MB limit
+    let audioKey: string | undefined
+    let presignedJobId: string | undefined
+    if (!isDev && !youtubeMode && songFile) {
+      try {
+        const presignRes = await fetch('/api/studio/presign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ secret }),
+        })
+        if (!presignRes.ok) {
+          const { error } = await presignRes.json() as { error?: string }
+          setResult({ ok: false, message: error ?? 'Error obteniendo URL de subida' })
+          setSaving(false)
+          return
+        }
+        const { uploadUrl, key, jobId: jid } = await presignRes.json() as { uploadUrl: string; key: string; jobId: string }
+        audioKey = key
+        presignedJobId = jid
+
+        const uploadRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'audio/mpeg' },
+          body: songFile,
+        })
+        if (!uploadRes.ok) {
+          setResult({ ok: false, message: 'Error subiendo el archivo a R2' })
+          setSaving(false)
+          return
+        }
+      } catch {
+        setResult({ ok: false, message: 'No se pudo subir el archivo' })
+        setSaving(false)
+        return
+      }
+      setPhase('Enviando a Modal...')
+    }
+
     const fd = new FormData()
     fd.append('id', id)
     fd.append('title', title)
     fd.append('artist', artist)
-    fd.append('secret', secret)
+    if (!isDev) fd.append('secret', secret)
     if (bpm) fd.append('bpm', bpm)
     if (youtubeMode) {
       fd.append('youtubeUrl', youtubeUrl.trim())
-    } else {
+    } else if (isDev) {
       fd.append('song', songFile!, songFile!.name)
+    } else {
+      fd.append('audioKey', audioKey!)
+      fd.append('jobId', presignedJobId!)
     }
     if (chordsFile) fd.append('chords', chordsFile, chordsFile.name)
 

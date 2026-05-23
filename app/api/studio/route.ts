@@ -138,25 +138,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'MODAL_WEBHOOK_URL no configurado' }, { status: 500 })
   }
 
-  const jobId = crypto.randomUUID()
+  // audioKey is set when the client uploaded the file directly to R2 via presigned URL
+  const audioKey = (formData.get('audioKey') as string | null)?.trim()
+  const presetJobId = (formData.get('jobId') as string | null)?.trim()
+  const jobId = presetJobId ?? crypto.randomUUID()
+
   let audioUrl: string = youtubeUrl ?? ''
+  if (audioKey) {
+    audioUrl = `${process.env.NEXT_PUBLIC_R2_URL}/${audioKey}`
+  }
+
   let chordsKey: string | undefined
-
   try {
-    if (songFile) {
-      const songBuffer = Buffer.from(await songFile.arrayBuffer())
-      const tmpKey = `tmp/${jobId}.mp3`
-      await uploadToR2(tmpKey, songBuffer, 'audio/mpeg', 'no-store')
-      audioUrl = `${process.env.NEXT_PUBLIC_R2_URL}/${tmpKey}`
-    }
-
     if (chordsFile instanceof File && chordsFile.size > 0) {
       const chordsBuffer = Buffer.from(await chordsFile.arrayBuffer())
       chordsKey = `songs/${slug}/${path.basename(chordsFile.name)}`
       await uploadToR2(chordsKey, chordsBuffer, 'application/pdf')
     }
   } catch {
-    return NextResponse.json({ error: 'Error subiendo archivos a R2' }, { status: 500 })
+    return NextResponse.json({ error: 'Error subiendo acordes a R2' }, { status: 500 })
   }
 
   try {
