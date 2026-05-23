@@ -261,11 +261,11 @@ export default function MultiTrackWaveform({
                   value={vol}
                   onChange={(e) => onVolumeChange(i, parseFloat(e.target.value))}
                   disabled={isMuted}
-                  className="appearance-none cursor-pointer touch-manipulation rounded-full disabled:opacity-40"
+                  className="cursor-pointer touch-manipulation disabled:opacity-40"
                   style={{
                     writingMode: 'vertical-lr' as const,
                     direction: 'rtl',
-                    width: '6px',
+                    width: '20px',
                     height: '100%',
                     accentColor: colors.progress,
                   }}
