@@ -31,8 +31,9 @@ export async function POST(req: NextRequest) {
   const songFile = formData.get('song') as File | null
   const chordsFile = formData.get('chords') as File | null
   const youtubeUrl = (formData.get('youtubeUrl') as string | null)?.trim() || null
+  const audioKeyEarly = (formData.get('audioKey') as string | null)?.trim() || null
 
-  if (!slug || !title || !artist || (!songFile && !youtubeUrl)) {
+  if (!slug || !title || !artist || (!songFile && !youtubeUrl && !audioKeyEarly)) {
     return NextResponse.json({ error: 'Faltan campos requeridos (id, title, artist, y song o youtubeUrl)' }, { status: 400 })
   }
 
