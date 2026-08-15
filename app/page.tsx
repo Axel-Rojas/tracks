@@ -3,7 +3,8 @@ import { api } from '@/convex/_generated/api'
 import type { SongIndex } from '@/lib/types'
 import SongListClient from '@/components/SongList/SongListClient'
 
-// export const revalidate = 3600
+// El listado tiene que reflejar la DB en cada request: sin prerender ni ISR.
+export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
   let songs: SongIndex[] = []

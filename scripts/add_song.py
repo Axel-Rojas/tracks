@@ -6,6 +6,7 @@ Uso:
     python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista"
     python scripts/add_song.py --youtube-url "https://youtu.be/..." --title "Nombre" --artist "Artista"
     python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista" --bpm 120
+    python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista" --jobs 2
 
 Requiere:
     pip install demucs yt-dlp boto3
@@ -38,6 +39,15 @@ if hasattr(sys.stderr, 'buffer'):
 
 REPO_ROOT = Path(__file__).parent.parent
 R2_BUCKET = 'tracks-app'
+
+# Tope de jobs paralelos de Demucs en CPU. Cada job suma uso de RAM, así que
+# más allá de 4 el cuello de botella suele ser memoria, no cores.
+MAX_JOBS = 4
+
+
+def default_jobs() -> int:
+    """Jobs paralelos para Demucs según los cores disponibles (1 si no se puede detectar)."""
+    return max(1, min(MAX_JOBS, (os.cpu_count() or 4) // 4))
 
 
 def load_env():
@@ -161,7 +171,7 @@ def sanitize_filename(p: Path) -> Path:
     return dst
 
 
-def run_demucs(input_file: Path, out_dir: Path) -> Path:
+def run_demucs(input_file: Path, out_dir: Path, jobs: int = 1) -> Path:
     ffmpeg = find_ffmpeg()
     ffmpeg_dir = str(Path(ffmpeg).parent)
     env = {
@@ -184,9 +194,10 @@ def run_demucs(input_file: Path, out_dir: Path) -> Path:
             sys.exit(1)
         wav_file = sanitize_filename(wav_file)
 
-    print("\n>> Separando pistas con Demucs (puede tardar varios minutos)...")
+    print(f"\n>> Separando pistas con Demucs ({jobs} job{'s' if jobs > 1 else ''}, puede tardar varios minutos)...")
     result = subprocess.run(
-        [sys.executable, "-m", "demucs", "--two-stems=vocals", "--mp3", "--out", str(out_dir), str(wav_file)],
+        [sys.executable, "-m", "demucs", "--two-stems=vocals", "--mp3",
+         "-j", str(jobs), "--out", str(out_dir), str(wav_file)],
         text=True, env=env,
     )
     if result.returncode != 0:
@@ -276,7 +287,12 @@ def main():
     parser.add_argument("--artist", required=True, help="Artista")
     parser.add_argument("--bpm", type=int, default=None, help="BPM (opcional)")
     parser.add_argument("--id", dest="song_id", default=None, help="ID/slug de R2 (default: slug del título)")
+    parser.add_argument("--jobs", "-j", type=int, default=None,
+                        help=f"Jobs paralelos de Demucs en CPU (default: {default_jobs()} en esta máquina). "
+                             "Más jobs = más rápido pero más RAM; bajalo a 1-2 si te quedás sin memoria.")
     args = parser.parse_args()
+
+    jobs = args.jobs if args.jobs and args.jobs > 0 else default_jobs()
 
     if not args.input and not args.youtube_url:
         print("ERROR: Debés proveer un archivo de entrada o --youtube-url.")
@@ -302,7 +318,7 @@ def main():
                 print(f"ERROR: No se encontró el archivo: {input_file}")
                 sys.exit(1)
 
-        stem_dir = run_demucs(input_file, tmp_path)
+        stem_dir = run_demucs(input_file, tmp_path, jobs)
 
         vocals_src = stem_dir / "vocals.mp3"
         no_vocals_src = stem_dir / "no_vocals.mp3"

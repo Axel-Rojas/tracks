@@ -1,10 +1,9 @@
 'use client'
 
 import { useRef } from 'react'
-import { Play, Pause, SkipBack, SkipForward, Loader2, Music, Drum, Repeat, Plus } from 'lucide-react'
-import type { Marker, Region, Track } from '@/lib/types'
+import { Play, Pause, SkipBack, SkipForward, Loader2, Music, Drum, Repeat } from 'lucide-react'
+import type { Marker, Region } from '@/lib/types'
 import type { EngineState } from '@/hooks/useAudioEngine'
-import { TRACK_COLORS } from '@/lib/colors'
 import { formatTime } from '@/lib/format'
 import { UI } from '@/lib/constants'
 import { Volume2, VolumeX } from 'lucide-react'
@@ -25,8 +24,6 @@ interface Props {
   onSkipToMarker: (dir: -1 | 1) => void
   onSetActiveRegion: (id: string | null) => void
   onCountIn: () => void
-  tracks?: Track[]
-  onAddMarker?: (trackIndex: number) => void
   metronomeOn: boolean
   onToggleMetronome: () => void
   metronomeVolume: number
@@ -103,8 +100,6 @@ export default function TransportBar({
   onSkipToMarker,
   onSetActiveRegion,
   onCountIn,
-  tracks,
-  onAddMarker,
   metronomeOn,
   onToggleMetronome,
   metronomeVolume,
@@ -262,7 +257,7 @@ export default function TransportBar({
         </div>
 
         {/* Separator */}
-        <div className="w-px h-8 bg-zinc-700 mx-1" />
+        {regions.length > 0 && <div className="w-px h-8 bg-zinc-700 mx-1" />}
 
         {/* Region buttons */}
         {regions.map((r) => (
@@ -281,27 +276,6 @@ export default function TransportBar({
             {activeRegionId === r.id && <Repeat size={12} className="mr-1" />}{r.label}
           </button>
         ))}
-
-        {/* Add marker per track */}
-        {(tracks ?? []).map((track, i) => {
-          const color = TRACK_COLORS[i % TRACK_COLORS.length].progress
-          return (
-            <button
-              key={track.id}
-              onClick={() => onAddMarker?.(i)}
-              disabled={isDisabled}
-              className="h-9 px-3 rounded-full text-xs font-medium touch-manipulation disabled:opacity-40 transition-opacity border"
-              style={{
-                color,
-                borderColor: `${color}55`,
-                background: `${color}15`,
-              }}
-            >
-              <Plus size={12} className="mr-0.5" />{track.label}
-            </button>
-          )
-        })}
-
       </div>
     </div>
   )

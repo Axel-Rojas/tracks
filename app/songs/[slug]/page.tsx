@@ -6,7 +6,8 @@ interface Props {
   params: Promise<{ slug: string }>
 }
 
-export const revalidate = 3600
+// Igual que el listado: meta de la canción y sidebar siempre frescos.
+export const dynamic = 'force-dynamic'
 
 export default async function SongPage({ params }: Props) {
   const { slug } = await params

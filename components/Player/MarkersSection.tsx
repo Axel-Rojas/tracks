@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Pencil, Eye, EyeOff } from 'lucide-react'
+import { ChevronDown, ChevronRight, Pencil, Eye, EyeOff, Plus } from 'lucide-react'
 import type { Marker, Track } from '@/lib/types'
 import { TRACK_COLORS } from '@/lib/colors'
 import { formatTime } from '@/lib/format'
@@ -14,8 +14,10 @@ interface Props {
   localMarkers: Marker[]
   tracks: Track[]
   onSeek: (t: number) => void
+  onAddMarker: (trackIndex: number) => void
   onEditMarker: (index: number, label: string, trackIndex: number | undefined) => void
   onDelete: (index: number) => void
+  addDisabled?: boolean
 }
 
 interface EditState {
@@ -39,8 +41,10 @@ export default function MarkersSection({
   localMarkers,
   tracks,
   onSeek,
+  onAddMarker,
   onEditMarker,
   onDelete,
+  addDisabled = false,
 }: Props) {
   const [editState, setEditState] = useState<EditState | null>(null)
 
@@ -87,51 +91,74 @@ export default function MarkersSection({
           </button>
         </div>
 
-        {/* Marker chips */}
+        {/* Add marker per track + marker chips */}
         {isOpen && (
-          <div className="px-3 pb-3 flex gap-2 flex-wrap overflow-y-auto max-h-32">
-            {allSorted.length === 0 && (
-              <span className="text-xs text-zinc-600 py-1">
-                Usa los botones + del player para agregar marcadores
-              </span>
-            )}
-            {allSorted.map((m, i) => {
-              const color = markerColor(m)
-              const trackLabel = m.trackIndex !== undefined ? tracks[m.trackIndex]?.label : undefined
-              return (
-                <div key={i} className="flex items-center gap-0.5">
-                  {/* Seek button */}
+          <div className="px-3 pb-3 flex flex-col gap-2">
+            <div className="flex gap-2 flex-wrap">
+              {tracks.map((track, i) => {
+                const color = TRACK_COLORS[i % TRACK_COLORS.length].progress
+                return (
                   <button
-                    onClick={() => onSeek(m.time)}
-                    className="h-10 px-3 rounded-full text-xs font-medium touch-manipulation flex items-center gap-2 border active:scale-95 transition-transform"
+                    key={track.id}
+                    onClick={() => onAddMarker(i)}
+                    disabled={addDisabled}
+                    className="h-8 px-3 rounded-full text-xs font-medium touch-manipulation disabled:opacity-40 transition-opacity border"
                     style={{
                       color,
-                      borderColor: `${color}44`,
-                      background: `${color}12`,
+                      borderColor: `${color}55`,
+                      background: `${color}15`,
                     }}
                   >
-                    <span className="opacity-60 tabular-nums">{formatTime(m.time)}</span>
-                    <span>{m.label}</span>
-                    {trackLabel && (
-                      <span
-                        className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
-                        style={{ background: `${color}30`, color }}
-                      >
-                        {trackLabel}
-                      </span>
-                    )}
+                    <Plus size={12} className="inline mr-0.5" />{track.label}
                   </button>
+                )
+              })}
+            </div>
 
-                  <button
-                    onClick={() => setEditState({ index: m.localIndex, label: m.label, trackIndex: m.trackIndex })}
-                    className="h-9 w-9 flex items-center justify-center rounded-full text-zinc-600 hover:text-zinc-300 active:bg-zinc-800 touch-manipulation transition-colors text-sm"
-                    aria-label="Editar marcador"
-                  >
-                    <Pencil size={12} />
-                  </button>
-                </div>
-              )
-            })}
+            <div className="flex gap-2 flex-wrap overflow-y-auto max-h-32">
+              {allSorted.length === 0 && (
+                <span className="text-xs text-zinc-600 py-1">
+                  Usa los botones + para agregar marcadores en la posición actual
+                </span>
+              )}
+              {allSorted.map((m, i) => {
+                const color = markerColor(m)
+                const trackLabel = m.trackIndex !== undefined ? tracks[m.trackIndex]?.label : undefined
+                return (
+                  <div key={i} className="flex items-center gap-0.5">
+                    {/* Seek button */}
+                    <button
+                      onClick={() => onSeek(m.time)}
+                      className="h-10 px-3 rounded-full text-xs font-medium touch-manipulation flex items-center gap-2 border active:scale-95 transition-transform"
+                      style={{
+                        color,
+                        borderColor: `${color}44`,
+                        background: `${color}12`,
+                      }}
+                    >
+                      <span className="opacity-60 tabular-nums">{formatTime(m.time)}</span>
+                      <span>{m.label}</span>
+                      {trackLabel && (
+                        <span
+                          className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
+                          style={{ background: `${color}30`, color }}
+                        >
+                          {trackLabel}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => setEditState({ index: m.localIndex, label: m.label, trackIndex: m.trackIndex })}
+                      className="h-9 w-9 flex items-center justify-center rounded-full text-zinc-600 hover:text-zinc-300 active:bg-zinc-800 touch-manipulation transition-colors text-sm"
+                      aria-label="Editar marcador"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>

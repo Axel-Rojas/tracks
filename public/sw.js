@@ -1,7 +1,11 @@
-const CACHE_VERSION = 'v1'
+const CACHE_VERSION = 'v2'
 const SHELL_CACHE = `app-shell-${CACHE_VERSION}`
 
-const SHELL_ASSETS = ['/', '/manifest.json', '/icon.svg']
+// Solo assets realmente estáticos. El HTML de "/" NO se precachea:
+// se guarda recién cuando el usuario lo visita, y únicamente como fallback offline.
+const SHELL_ASSETS = ['/manifest.json', '/icon.svg']
+
+const AUDIO_EXT = /\.(mp3|wav|ogg|m4a|flac|opus|aac)$/i
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -25,18 +29,21 @@ self.addEventListener('fetch', (event) => {
 
   if (request.method !== 'GET' || url.origin !== self.location.origin) return
 
-  // Audio files: always network, never cache
-  if (url.pathname.startsWith('/songs/')) return
+  // Audio: siempre red, nunca cache (archivos pesados y de larga duración).
+  if (AUDIO_EXT.test(url.pathname)) return
 
-  // Next.js static chunks: cache-first, populate on miss
+  // Chunks de Next: el nombre lleva hash de contenido, así que son inmutables.
+  // Cache-first es seguro acá — un chunk nuevo tiene otra URL.
   if (url.pathname.startsWith('/_next/static/')) {
     event.respondWith(
       caches.match(request).then(
         (cached) =>
           cached ??
           fetch(request).then((response) => {
-            const clone = response.clone()
-            caches.open(SHELL_CACHE).then((cache) => cache.put(request, clone))
+            if (response.ok) {
+              const clone = response.clone()
+              caches.open(SHELL_CACHE).then((cache) => cache.put(request, clone))
+            }
             return response
           })
       )
@@ -44,17 +51,18 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Everything else: cache-first
+  // Todo lo demás (navegaciones HTML y payloads RSC de `?_rsc=`): network-first.
+  // Estas respuestas llevan datos de Convex, así que la copia en cache solo
+  // sirve como fallback offline, nunca para ahorrarse el request.
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached
-      return fetch(request).then((response) => {
+    fetch(request)
+      .then((response) => {
         if (response.ok) {
           const clone = response.clone()
           caches.open(SHELL_CACHE).then((cache) => cache.put(request, clone))
         }
         return response
       })
-    })
+      .catch(() => caches.match(request).then((cached) => cached ?? Response.error()))
   )
 })

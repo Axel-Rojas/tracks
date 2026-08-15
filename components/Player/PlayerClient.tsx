@@ -227,8 +227,10 @@ export default function PlayerClient({ meta, songs }: Props) {
           localMarkers={markers.localMarkers}
           tracks={meta.tracks}
           onSeek={engine.seek}
+          onAddMarker={markers.addMarker}
           onEditMarker={markers.editMarker}
           onDelete={markers.deleteMarker}
+          addDisabled={engine.state === 'idle' || engine.state === 'loading'}
         />
 
         <div className="flex-shrink-0 px-3 pb-5 pt-2 border-t border-zinc-800">
@@ -248,8 +250,6 @@ export default function PlayerClient({ meta, songs }: Props) {
             onSkipToMarker={handleSkipToMarker}
             onSetActiveRegion={handleSetActiveRegion}
             onCountIn={metronome.handleCountIn}
-            tracks={meta.tracks}
-            onAddMarker={markers.addMarker}
             metronomeOn={metronome.metronomeOn}
             onToggleMetronome={metronome.toggleMetronome}
             metronomeVolume={metronome.metronomeVolume}
