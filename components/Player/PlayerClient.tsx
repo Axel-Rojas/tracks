@@ -182,6 +182,15 @@ export default function PlayerClient({ meta, songs }: Props) {
           )}
         </header>
 
+        {engine.error && (
+          <div
+            role="alert"
+            className="flex-shrink-0 mx-3 mt-2 rounded-lg border border-red-900 bg-red-950 px-3 py-2 text-xs text-red-300"
+          >
+            {engine.error}
+          </div>
+        )}
+
         <div className="flex-1 min-h-0 px-3 py-3">
           <MultiTrackWaveform
             songId={meta.id}

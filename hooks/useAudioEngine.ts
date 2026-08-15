@@ -6,6 +6,15 @@ import { rawUrl } from '@/lib/songs'
 
 export type EngineState = 'idle' | 'loading' | 'ready' | 'playing' | 'paused'
 
+// `navigator.audioSession` existe desde iOS 16.4 pero todavía no está en lib.dom.
+declare global {
+  interface Navigator {
+    audioSession?: {
+      type: 'auto' | 'playback' | 'transient' | 'transient-solo' | 'ambient' | 'play-and-record'
+    }
+  }
+}
+
 async function fetchWithProgress(
   url: string,
   signal: AbortSignal,
@@ -59,6 +68,7 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
   const mutedRef = useRef<boolean[]>([])
 
   const [state, setState] = useState<EngineState>('idle')
+  const [error, setError] = useState<string | null>(null)
   const stateRef = useRef<EngineState>('idle')
   const [volumes, setVolumes] = useState<number[]>([])
   const [muted, setMuted] = useState<boolean[]>([])
@@ -91,8 +101,15 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
   useEffect(() => {
     if (tracks.length === 0) return
     setState('loading')
+    setError(null)
     loadingProgressRawRef.current = tracks.map(() => 0)
     setLoadingProgress(tracks.map(() => 0))
+
+    // Sin esto, en iOS el audio sale por la categoría "ambient" y el switch
+    // físico de silencio lo muta por completo. 'playback' la ignora.
+    try {
+      if (navigator.audioSession) navigator.audioSession.type = 'playback'
+    } catch { /* implementación parcial: seguimos con el default */ }
 
     const ctx = new AudioContext()
     ctxRef.current = ctx
@@ -136,6 +153,8 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
       })
       .catch((err) => {
         if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return
+        console.error('[audio] fallo al cargar las pistas:', err)
+        setError('No se pudieron cargar las pistas. Revisá la conexión y recargá.')
         setState('idle')
       })
 
@@ -163,8 +182,11 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
       const ctx = ctxRef.current!
       const gains = gainsRef.current
 
+      // stop() además de disconnect(): un source desconectado pero no detenido
+      // sigue corriendo hasta el final del buffer y se acumula en cada seek.
       sourcesRef.current.forEach((s) => {
-        try { s.disconnect() } catch { /* already stopped */ }
+        try { s.stop() } catch { /* nunca arrancó o ya terminó */ }
+        try { s.disconnect() } catch { /* ya desconectado */ }
       })
 
       const newSources = buffersRef.current.map((buf, i) => {
@@ -186,22 +208,27 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
 
   const play = useCallback(() => {
     const ctx = ctxRef.current
-    if (!ctx || buffersRef.current.length === 0) return
+    if (!ctx || ctx.state === 'closed' || buffersRef.current.length === 0) return
 
-    if (ctx.state === 'suspended') {
-      ctx.resume().then(() => {
-        createAndStartSources(offsetRef.current)
-        stateRef.current = 'playing'
-        setState('playing')
-        rafRef.current = requestAnimationFrame(tick)
+    const start = () => {
+      setError(null)
+      createAndStartSources(offsetRef.current)
+      stateRef.current = 'playing'
+      setState('playing')
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    // Safari agrega un cuarto estado, 'interrupted' (llamada, Siri, pantalla
+    // bloqueada), que no está en el tipo de TS. Todo lo que no sea 'running'
+    // necesita resume(): arrancar sources sobre un ctx interrumpido no suena.
+    if (ctx.state !== 'running') {
+      ctx.resume().then(start).catch(() => {
+        setError('El audio quedó interrumpido. Tocá play de nuevo.')
       })
       return
     }
 
-    createAndStartSources(offsetRef.current)
-    stateRef.current = 'playing'
-    setState('playing')
-    rafRef.current = requestAnimationFrame(tick)
+    start()
   }, [createAndStartSources, tick])
 
   const pause = useCallback(() => {
@@ -266,6 +293,7 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
 
   return {
     state,
+    error,
     loadingProgress,
     currentTime,
     duration,

@@ -97,7 +97,7 @@ export function useMetronome({ engineState, getContext, bpm, releaseSources, pla
 
   const handleCountIn = useCallback(() => {
     const ctx = getContext()
-    if (!ctx || countingIn) return
+    if (!ctx || ctx.state === 'closed' || countingIn) return
 
     releaseSources()
     setCountingIn(true)
@@ -115,8 +115,10 @@ export function useMetronome({ engineState, getContext, bpm, releaseSources, pla
       )
     }
 
-    if (ctx.state === 'suspended') {
-      ctx.resume().then(doCountIn)
+    // Igual que en play(): Safari puede estar en 'interrupted', no solo
+    // 'suspended'. El catch evita que el botón quede trabado en countingIn.
+    if (ctx.state !== 'running') {
+      ctx.resume().then(doCountIn).catch(() => setCountingIn(false))
     } else {
       doCountIn()
     }
