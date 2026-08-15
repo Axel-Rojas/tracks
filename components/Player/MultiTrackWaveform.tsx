@@ -28,10 +28,26 @@ interface Props {
   loadingProgress: number[]
 }
 
+const MARKER_COLOR = 'rgba(255,255,255,0.9)'
+
 function markersForTrack(markers: Marker[], trackIndex: number) {
   return markers.filter(
     (m) => m.trackIndex === trackIndex || (m.trackIndex === undefined && trackIndex === 0)
   )
+}
+
+// start === end makes wavesurfer render the region as a marker: a vertical
+// line (border-left) instead of a zero-width filled block.
+function markerRegionOptions(m: Marker) {
+  return {
+    id: `m::${m.time}::${m.label}`,
+    start: m.time,
+    end: m.time,
+    content: m.label,
+    color: MARKER_COLOR,
+    drag: false,
+    resize: false,
+  }
 }
 
 function regionsForTrack(regions: Region[], trackIndex: number) {
@@ -112,15 +128,7 @@ export default function MultiTrackWaveform({
 
         // Markers for this track
         markersForTrack(markersRef.current, i).forEach((m) => {
-          regionsPlugin.addRegion({
-            id: `m::${m.time}::${m.label}`,
-            start: m.time,
-            end: m.time + 0.01,
-            content: m.label,
-            color: 'rgba(255,255,255,0.07)',
-            drag: false,
-            resize: false,
-          })
+          regionsPlugin.addRegion(markerRegionOptions(m))
         })
 
         // Loop regions — only those assigned to this track
@@ -203,15 +211,7 @@ export default function MultiTrackWaveform({
         if (r.id.startsWith('m::')) r.remove()
       })
       markersForTrack(markers, i).forEach((m) => {
-        plugin.addRegion({
-          id: `m::${m.time}::${m.label}`,
-          start: m.time,
-          end: m.time + 0.01,
-          content: m.label,
-          color: 'rgba(255,255,255,0.07)',
-          drag: false,
-          resize: false,
-        })
+        plugin.addRegion(markerRegionOptions(m))
       })
     })
   }, [markers, tracks])
