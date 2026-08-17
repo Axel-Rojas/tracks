@@ -4,22 +4,13 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { X, ArrowLeft, ChevronDown, ChevronRight } from 'lucide-react'
 import type { SongIndex } from '@/lib/types'
+import { groupByArtist } from '@/lib/songs'
 
 interface Props {
   songs: SongIndex[]
   currentId: string
   isOpen: boolean
   onClose: () => void
-}
-
-function groupByArtist(songs: SongIndex[]): [string, SongIndex[]][] {
-  const map = new Map<string, SongIndex[]>()
-  for (const song of songs) {
-    const list = map.get(song.artist) ?? []
-    list.push(song)
-    map.set(song.artist, list)
-  }
-  return [...map.entries()].sort(([a], [b]) => a.localeCompare(b, 'es'))
 }
 
 export default function SongSidebar({ songs, currentId, isOpen, onClose }: Props) {

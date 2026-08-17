@@ -21,6 +21,30 @@ body {
 }
 
 
+/* Sliders del transport: sin esto el thumb hereda el accent color del sistema
+   operativo (puede salir rojo, azul, lo que tenga el usuario). El color va por
+   --thumb para que cada slider use el suyo. */
+.slider-thumb {
+  accent-color: var(--thumb);
+}
+.slider-thumb::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--thumb);
+  border: none;
+  cursor: pointer;
+}
+.slider-thumb::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--thumb);
+  border: none;
+  cursor: pointer;
+}
+
 /* Scrollbar oscura */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }

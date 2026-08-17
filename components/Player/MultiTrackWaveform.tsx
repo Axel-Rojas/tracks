@@ -245,10 +245,12 @@ export default function MultiTrackWaveform({
             className="flex items-stretch gap-2 flex-1 min-h-0 bg-zinc-800/50 rounded-lg px-2 py-1.5"
           >
             {/* Vertical slider column */}
-            <div className="flex flex-col items-center gap-1 w-10 flex-shrink-0 py-0.5">
+            {/* w-16 para que entre "Instrumental" (el label más largo) sin cortarse. */}
+            <div className="flex flex-col items-center gap-1 w-16 flex-shrink-0 py-0.5">
               <span
-                className="text-[10px] font-medium leading-none"
+                className="text-[10px] font-medium leading-none w-full text-center truncate"
                 style={{ color: isMuted ? '#52525b' : colors.progress }}
+                title={track.label}
               >
                 {track.label}
               </span>

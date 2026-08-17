@@ -1,15 +1,19 @@
+import { Suspense } from 'react'
+import { connection } from 'next/server'
 import { fetchQuery } from 'convex/nextjs'
 import { api } from '@/convex/_generated/api'
 import PlayerClient from './PlayerClient'
+import SongLoading from './loading'
 
 interface Props {
   params: Promise<{ slug: string }>
 }
 
-// Igual que el listado: meta de la canción y sidebar siempre frescos.
-export const dynamic = 'force-dynamic'
-
-export default async function SongPage({ params }: Props) {
+// Igual que el listado: meta de la canción y sidebar siempre frescos, sin cache.
+// El await de params vive acá adentro, detrás del <Suspense>, para que el shell
+// de la ruta no quede atado a un slug y se pueda prefetchear una sola vez.
+async function Song({ params }: Props) {
+  await connection()
   const { slug } = await params
 
   const [meta, songs] = await Promise.all([
@@ -28,4 +32,12 @@ export default async function SongPage({ params }: Props) {
   }
 
   return <PlayerClient meta={meta} songs={songs} />
+}
+
+export default function SongPage({ params }: Props) {
+  return (
+    <Suspense fallback={<SongLoading />}>
+      <Song params={params} />
+    </Suspense>
+  )
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef } from 'react'
-import { Play, Pause, SkipBack, SkipForward, Loader2, Music, Drum, Repeat } from 'lucide-react'
+import { Play, Pause, RotateCcw, RotateCw, Loader2, Timer, Metronome, Repeat } from 'lucide-react'
 import type { Marker, Region } from '@/lib/types'
 import type { EngineState } from '@/hooks/useAudioEngine'
 import { formatTime } from '@/lib/format'
@@ -79,7 +79,14 @@ function SkipButton({
       className="h-11 w-11 flex items-center justify-center rounded-full bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 disabled:opacity-40 transition-colors touch-manipulation text-zinc-300 select-none"
       aria-label={label}
     >
-      {dir === -1 ? <SkipBack size={16} /> : <SkipForward size={16} />}
+      {/* Flecha circular con los segundos adentro: deja claro que salta N s
+          (mantener apretado sigue saltando al marcador). */}
+      <span className="relative flex items-center justify-center">
+        {dir === -1 ? <RotateCcw size={22} /> : <RotateCw size={22} />}
+        <span className="absolute text-[9px] font-bold leading-none tabular-nums">
+          {Math.abs(delta)}
+        </span>
+      </span>
     </button>
   )
 }
@@ -130,10 +137,11 @@ export default function TransportBar({
           value={currentTime}
           onChange={(e) => onSeek(parseFloat(e.target.value))}
           disabled={isDisabled}
-          className="flex-1 h-1.5 rounded-full appearance-none cursor-pointer touch-manipulation disabled:opacity-40"
+          className="slider-thumb flex-1 h-1.5 rounded-full appearance-none cursor-pointer touch-manipulation disabled:opacity-40"
           style={{
             background: `linear-gradient(to right, #4ade80 ${(currentTime / (duration || 1)) * 100}%, #52525b ${(currentTime / (duration || 1)) * 100}%)`,
-          }}
+            '--thumb': '#4ade80',
+          } as React.CSSProperties}
           aria-label="Posición"
         />
         <span className="text-xs text-zinc-400 w-9 tabular-nums">{formatTime(duration)}</span>
@@ -163,7 +171,7 @@ export default function TransportBar({
           aria-label="Claqueta (4 tiempos)"
           title="Tap: count-in de 4 tiempos al BPM"
         >
-          {countingIn ? countInBeat : <Music size={16} />}
+          {countingIn ? countInBeat : <Timer size={18} />}
         </button>
 
         {/* Metronome toggle + volume */}
@@ -179,7 +187,7 @@ export default function TransportBar({
             aria-label="Metrónomo"
             title="Metrónomo continuo"
           >
-            <Drum size={16} />
+            <Metronome size={18} />
           </button>
           {metronomeOn && (
             <input
@@ -189,10 +197,11 @@ export default function TransportBar({
               step={0.05}
               value={metronomeVolume}
               onChange={(e) => onMetronomeVolumeChange(parseFloat(e.target.value))}
-              className="w-16 h-1.5 rounded-full appearance-none cursor-pointer touch-manipulation"
+              className="slider-thumb w-16 h-1.5 rounded-full appearance-none cursor-pointer touch-manipulation"
               style={{
                 background: `linear-gradient(to right, #f59e0b ${metronomeVolume * 100}%, #3f3f46 ${metronomeVolume * 100}%)`,
-              }}
+                '--thumb': '#f59e0b',
+              } as React.CSSProperties}
               aria-label="Volumen metrónomo"
             />
           )}
@@ -248,10 +257,11 @@ export default function TransportBar({
             step={0.01}
             value={globalVolume}
             onChange={(e) => onGlobalVolumeChange(parseFloat(e.target.value))}
-            className="w-20 h-1.5 rounded-full appearance-none cursor-pointer touch-manipulation"
+            className="slider-thumb w-20 h-1.5 rounded-full appearance-none cursor-pointer touch-manipulation"
             style={{
-              background: `linear-gradient(to right, #a1a1aa ${globalVolume * 100}%, #3f3f46 ${globalVolume * 100}%)`,
-            }}
+              background: `linear-gradient(to right, #4ade80 ${globalVolume * 100}%, #3f3f46 ${globalVolume * 100}%)`,
+              '--thumb': '#4ade80',
+            } as React.CSSProperties}
             aria-label="Volumen global"
           />
         </div>
