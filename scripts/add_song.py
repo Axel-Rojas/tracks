@@ -7,6 +7,7 @@ Uso:
     python scripts/add_song.py --youtube-url "https://youtu.be/..." --title "Nombre" --artist "Artista"
     python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista" --bpm 120
     python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista" --jobs 2
+    python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista" --stems 4
     python scripts/add_song.py --youtube-url "..." --title "N" --artist "A" --cookies-from-browser none
 
 Requiere:
@@ -49,6 +50,23 @@ DEFAULT_COOKIES_BROWSER = 'firefox'
 # Tope de jobs paralelos de Demucs en CPU. Cada job suma uso de RAM, así que
 # más allá de 4 el cuello de botella suele ser memoria, no cores.
 MAX_JOBS = 4
+
+# Pistas que produce cada modo, en el orden en que las ve el player (la pista 0
+# es la que maneja el seek en el waveform). El nombre del archivo es el que
+# escribe Demucs y también la key en R2. Separar en 4 no cuesta más tiempo:
+# htdemucs siempre calcula las 4 fuentes y --two-stems solo las mezcla al final.
+STEM_LAYOUTS = {
+    2: [
+        ("no_vocals.mp3", "instrumental", "Instrumental"),
+        ("vocals.mp3", "voz", "Voz"),
+    ],
+    4: [
+        ("drums.mp3", "bateria", "Batería"),
+        ("bass.mp3", "bajo", "Bajo"),
+        ("other.mp3", "otros", "Otros"),
+        ("vocals.mp3", "voz", "Voz"),
+    ],
+}
 
 
 def default_jobs() -> int:
@@ -212,7 +230,27 @@ def sanitize_filename(p: Path) -> Path:
     return dst
 
 
-def run_demucs(input_file: Path, out_dir: Path, jobs: int = 1) -> Path:
+def find_stem_dir(out_dir: Path, stem_base: str) -> Path:
+    """Carpeta donde Demucs dejó los stems: <out_dir>/<modelo>/<nombre del wav>."""
+    model_dirs = sorted(out_dir.glob("htdemucs*"))
+    if not model_dirs:
+        print(f"ERROR: No se encontró output de Demucs en {out_dir}")
+        sys.exit(1)
+    for model_dir in model_dirs:
+        candidate = model_dir / stem_base
+        if candidate.is_dir():
+            return candidate
+    # Demucs sanitiza el nombre del track, así que si no coincide exacto caemos
+    # en la única subcarpeta que haya.
+    for model_dir in model_dirs:
+        subdirs = [d for d in model_dir.iterdir() if d.is_dir()]
+        if subdirs:
+            return subdirs[0]
+    print(f"ERROR: Directorio de stems vacío en {model_dirs[0]}")
+    sys.exit(1)
+
+
+def run_demucs(input_file: Path, out_dir: Path, jobs: int = 1, stems: int = 2) -> Path:
     ffmpeg = find_ffmpeg()
     ffmpeg_dir = str(Path(ffmpeg).parent)
     env = {
@@ -235,9 +273,9 @@ def run_demucs(input_file: Path, out_dir: Path, jobs: int = 1) -> Path:
             sys.exit(1)
         wav_file = sanitize_filename(wav_file)
 
-    print(f"\n>> Separando pistas con Demucs ({jobs} job{'s' if jobs > 1 else ''}, puede tardar varios minutos)...")
+    print(f"\n>> Separando en {stems} pistas con Demucs ({jobs} job{'s' if jobs > 1 else ''}, puede tardar varios minutos)...")
     result = subprocess.run(
-        [sys.executable, "-m", "demucs", "--two-stems=vocals", "--mp3",
+        [sys.executable, "-m", "demucs", *(["--two-stems=vocals"] if stems == 2 else []), "--mp3",
          "-j", str(jobs), "--out", str(out_dir), str(wav_file)],
         text=True, env=env,
     )
@@ -245,20 +283,7 @@ def run_demucs(input_file: Path, out_dir: Path, jobs: int = 1) -> Path:
         print("ERROR: Demucs fallo.")
         sys.exit(1)
 
-    stem_base = wav_file.stem
-    stem_dir = out_dir / "htdemucs_2stems" / stem_base
-    if not stem_dir.exists():
-        model_dirs = list(out_dir.glob("htdemucs*"))
-        if not model_dirs:
-            print(f"ERROR: No se encontró output de Demucs en {out_dir}")
-            sys.exit(1)
-        candidates = list(model_dirs[0].iterdir())
-        if not candidates:
-            print(f"ERROR: Directorio de stems vacío en {model_dirs[0]}")
-            sys.exit(1)
-        stem_dir = candidates[0]
-
-    return stem_dir
+    return find_stem_dir(out_dir, wav_file.stem)
 
 
 def upload_to_r2(local_path: Path, key: str):
@@ -282,12 +307,8 @@ def upload_to_r2(local_path: Path, key: str):
     print(f"  ✓  {key}")
 
 
-def register_in_convex(song_id: str, title: str, artist: str, bpm: int | None):
+def register_in_convex(song_id: str, title: str, artist: str, bpm: int | None, tracks: list):
     convex_url = os.environ['NEXT_PUBLIC_CONVEX_URL'].rstrip('/')
-    tracks = [
-        {"id": "instrumental", "label": "Instrumental", "file": f"songs/{song_id}/no_vocals.mp3", "defaultVolume": 0.5},
-        {"id": "voz",           "label": "Voz",           "file": f"songs/{song_id}/vocals.mp3",   "defaultVolume": 0.5},
-    ]
     args = {
         "slug": song_id,
         "title": title,
@@ -328,6 +349,9 @@ def main():
     parser.add_argument("--artist", required=True, help="Artista")
     parser.add_argument("--bpm", type=int, default=None, help="BPM (opcional)")
     parser.add_argument("--id", dest="song_id", default=None, help="ID/slug de R2 (default: slug del título)")
+    parser.add_argument("--stems", type=int, choices=sorted(STEM_LAYOUTS), default=2,
+                        help="En cuántas pistas separar: 2 (Voz + Instrumental) o 4 "
+                             "(Batería, Bajo, Otros, Voz). Default: 2.")
     parser.add_argument("--jobs", "-j", type=int, default=None,
                         help=f"Jobs paralelos de Demucs en CPU (default: {default_jobs()} en esta máquina). "
                              "Más jobs = más rápido pero más RAM; bajalo a 1-2 si te quedás sin memoria.")
@@ -362,24 +386,30 @@ def main():
                 print(f"ERROR: No se encontró el archivo: {input_file}")
                 sys.exit(1)
 
-        stem_dir = run_demucs(input_file, tmp_path, jobs)
+        stem_dir = run_demucs(input_file, tmp_path, jobs, args.stems)
 
-        vocals_src = stem_dir / "vocals.mp3"
-        no_vocals_src = stem_dir / "no_vocals.mp3"
-        if not vocals_src.exists() or not no_vocals_src.exists():
-            print(f"ERROR: No se encontraron los stems en {stem_dir}")
-            print(f"  Contenido: {list(stem_dir.iterdir())}")
+        layout = STEM_LAYOUTS[args.stems]
+        missing = [name for name, _, _ in layout if not (stem_dir / name).exists()]
+        if missing:
+            print(f"ERROR: Faltan stems en {stem_dir}: {', '.join(missing)}")
+            print(f"  Contenido: {[p.name for p in stem_dir.iterdir()]}")
             sys.exit(1)
 
         print("\n>> Subiendo pistas a R2...")
-        upload_to_r2(no_vocals_src, f"songs/{song_id}/no_vocals.mp3")
-        upload_to_r2(vocals_src,    f"songs/{song_id}/vocals.mp3")
+        for name, _, _ in layout:
+            upload_to_r2(stem_dir / name, f"songs/{song_id}/{name}")
+
+    tracks = [
+        {"id": track_id, "label": label, "file": f"songs/{song_id}/{name}", "defaultVolume": 0.5}
+        for name, track_id, label in layout
+    ]
 
     print("\n>> Registrando en Convex...")
-    register_in_convex(song_id, args.title, args.artist, args.bpm)
+    register_in_convex(song_id, args.title, args.artist, args.bpm, tracks)
 
     print(f"\n✓ Canción lista:")
     print(f"  Título:  {args.title} — {args.artist}")
+    print(f"  Pistas:  {', '.join(label for _, _, label in layout)}")
     print(f"  R2 key:  songs/{song_id}/")
     if args.bpm:
         print(f"  BPM:     {args.bpm}")

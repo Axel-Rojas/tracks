@@ -25,7 +25,12 @@ export const listPublic = query({
       .query("songs")
       .withIndex("by_public", (q) => q.eq("isPublic", true))
       .collect()
-    return songs.map((s) => ({ id: s.slug, title: s.title, artist: s.artist }))
+    return songs.map((s) => ({
+      id: s.slug,
+      title: s.title,
+      artist: s.artist,
+      trackCount: s.tracks.length,
+    }))
   },
 })
 

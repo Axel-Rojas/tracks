@@ -32,6 +32,9 @@ export interface SongIndex {
   id: string
   title: string
   artist: string
+  // Opcional a propósito: las funciones de Convex se deployan aparte del front,
+  // así que entre un deploy y el otro la query todavía puede no mandarlo.
+  trackCount?: number
 }
 
 export type SSEEvent =

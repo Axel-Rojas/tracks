@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
-import { X, ArrowLeft, Music, ExternalLink } from 'lucide-react'
+import { X, ArrowLeft, Music, ExternalLink, AudioLines } from 'lucide-react'
 import Link from 'next/link'
 import type { SSEEvent, JobStatus } from '@/lib/types'
-import { parseETA, inferPhase } from '@/lib/studio'
+import { parseETA, inferPhase, STEM_OPTIONS, DEFAULT_STEM_MODE, type StemMode } from '@/lib/studio'
 
 function slugify(s: string) {
   return s
@@ -43,6 +43,8 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
   const [songFile, setSongFile] = useState<File | null>(null)
   const [youtubeMode, setYoutubeMode] = useState(false)
   const [youtubeUrl, setYoutubeUrl] = useState('')
+  const [stems, setStems] = useState<StemMode>(DEFAULT_STEM_MODE)
+  const stemOption = STEM_OPTIONS.find((o) => o.value === stems) ?? STEM_OPTIONS[0]
 
   const [saving, setSaving] = useState(false)
   const [phase, setPhase] = useState('')
@@ -138,6 +140,7 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
     fd.append('id', id)
     fd.append('title', title)
     fd.append('artist', artist)
+    fd.append('stems', String(stems))
     if (bpm) fd.append('bpm', bpm)
     if (youtubeMode) {
       fd.append('youtubeUrl', youtubeUrl.trim())
@@ -323,11 +326,38 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
               </div>
             )}
           </div>
+          {/* Cantidad de stems: por ahora solo en dev, igual que el modo YouTube. */}
+          {isDev && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex rounded-lg overflow-hidden border border-zinc-700 text-xs">
+                {STEM_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setStems(opt.value)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${
+                      stems === opt.value ? 'bg-zinc-600 text-white' : 'text-zinc-400 hover:text-zinc-300'
+                    }`}
+                  >
+                    <AudioLines size={12} /> {opt.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400">
+                en desarrollo
+              </span>
+            </div>
+          )}
+
           <p className="text-xs text-zinc-500">
             Demucs va a separar la pista en{' '}
-            <span className="text-zinc-400">Voz</span> e{' '}
-            <span className="text-zinc-400">Instrumental</span> automáticamente.
+            <span className="text-zinc-400">{stemOption.names.join(' · ')}</span> automáticamente.
           </p>
+          {stems !== DEFAULT_STEM_MODE && (
+            <p className="text-xs text-amber-500/80">
+              Separar tarda lo mismo, pero el player descarga y decodifica el doble de audio al abrir la canción.
+            </p>
+          )}
 
           {youtubeMode ? (
             <input

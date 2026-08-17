@@ -26,6 +26,7 @@ Deployed to Vercel. Song processing (stem separation) is a local-only developmen
 **Studio (dev only)**
 
 - Upload a raw MP3 or paste a YouTube URL; the server downloads and separates into stems using Demucs
+- Stem count selector (work in progress, dev only): 2 stems (Voz, Instrumental) or 4 stems (Batería, Bajo, Otros, Voz). Separation takes the same time either way — htdemucs always computes four sources and `--two-stems` merges them at the end — but 4 stems doubles the audio the player downloads and decodes
 - Real-time processing progress streamed to the browser via Server-Sent Events (phase labels, progress bar, ETA)
 - Creates the song directory, audio files, and metadata.json automatically; updates songs.json; invalidates the home page cache
 
@@ -129,9 +130,10 @@ Navigate to `/studio`. Upload the original MP3, fill in the metadata, and submit
 python scripts/add_song.py path/to/song.mp3 --title "Title" --artist "Artist"
 python scripts/add_song.py path/to/song.mp3 --title "Title" --artist "Artist" --bpm 120 --id custom-id
 python scripts/add_song.py --youtube-url "https://youtu.be/..." --title "Title" --artist "Artist"
+python scripts/add_song.py path/to/song.mp3 --title "Title" --artist "Artist" --stems 4
 ```
 
-For MP3 input the script converts to WAV first (required for Python 3.13+ torchaudio compatibility). For YouTube input the audio is downloaded directly as WAV via yt-dlp, skipping conversion. YouTube downloads reuse the logged-in session from Firefox by default (`--cookies-from-browser firefox`); pass `--cookies-from-browser none` to download anonymously, or another browser name to read cookies from it instead. Demucs runs with `--two-stems=vocals`, outputs are renamed to `Voz.mp3` and `Instrumental.mp3`, `metadata.json` is written, and the entry is inserted at the top of `songs.json`. The temporary WAV is discarded automatically.
+For MP3 input the script converts to WAV first (required for Python 3.13+ torchaudio compatibility). For YouTube input the audio is downloaded directly as WAV via yt-dlp, skipping conversion. YouTube downloads reuse the logged-in session from Firefox by default (`--cookies-from-browser firefox`); pass `--cookies-from-browser none` to download anonymously, or another browser name to read cookies from it instead. Demucs runs with `--two-stems=vocals` by default; `--stems 4` drops that flag and keeps the four sources (`drums`, `bass`, `other`, `vocals`). Each stem is uploaded to `songs/{id}/` in R2 and the song is registered in Convex with one track per stem. The temporary WAV is discarded automatically.
 
 After processing, commit the new song directory and updated `songs.json` to deploy to Vercel.
 

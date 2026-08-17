@@ -6,6 +6,7 @@ import path from 'path'
 import os from 'os'
 import crypto from 'crypto'
 import type { SSEEvent } from '@/lib/types'
+import { parseStemMode } from '@/lib/studio'
 
 export async function POST(req: NextRequest) {
   let formData: FormData
@@ -23,6 +24,11 @@ export async function POST(req: NextRequest) {
   const songFile = formData.get('song') as File | null
   const youtubeUrl = (formData.get('youtubeUrl') as string | null)?.trim() || null
   const audioKeyEarly = (formData.get('audioKey') as string | null)?.trim() || null
+  const stems = parseStemMode(formData.get('stems') as string | null)
+
+  if (stems === null) {
+    return NextResponse.json({ error: 'Cantidad de pistas inválida (2 o 4)' }, { status: 400 })
+  }
 
   if (!slug || !title || !artist || (!songFile && !youtubeUrl && !audioKeyEarly)) {
     return NextResponse.json({ error: 'Faltan campos requeridos (id, title, artist, y song o youtubeUrl)' }, { status: 400 })
@@ -51,6 +57,7 @@ export async function POST(req: NextRequest) {
       '--title', title,
       '--artist', artist,
       '--id', slug,
+      '--stems', String(stems),
       ...(bpm !== undefined ? ['--bpm', String(bpm)] : []),
       ...(youtubeUrl ? ['--youtube-url', youtubeUrl] : []),
     ]
@@ -150,7 +157,7 @@ export async function POST(req: NextRequest) {
     const modalRes = await fetch(process.env.MODAL_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ audioUrl, jobId, slug, title, artist, bpm }),
+      body: JSON.stringify({ audioUrl, jobId, slug, title, artist, bpm, stems }),
     })
 
     if (!modalRes.ok) {

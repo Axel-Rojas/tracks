@@ -250,7 +250,9 @@ export default function MultiTrackWaveform({
   }, [activeRegionId])
 
   return (
-    <div className="flex flex-col gap-1.5 h-full">
+    // Con 4 stems las filas se reparten la misma altura: min-h las frena antes de
+    // que el slider y el botón de mute queden inservibles, y el contenedor scrollea.
+    <div className="flex flex-col gap-1.5 h-full overflow-y-auto">
       {tracks.map((track, i) => {
         const colors = TRACK_COLORS[i % TRACK_COLORS.length]
         const vol = volumes[i] ?? track.defaultVolume
@@ -259,7 +261,7 @@ export default function MultiTrackWaveform({
         return (
           <div
             key={track.id}
-            className="flex items-stretch gap-2 flex-1 min-h-0 bg-zinc-800/50 rounded-lg px-2 py-1.5"
+            className="flex items-stretch gap-2 flex-1 min-h-[88px] bg-zinc-800/50 rounded-lg px-2 py-1.5"
           >
             {/* Vertical slider column */}
             {/* w-16 para que entre "Instrumental" (el label más largo) sin cortarse. */}

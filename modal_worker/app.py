@@ -21,6 +21,24 @@ image = (
 )
 
 
+# Pistas que produce cada modo, en el orden en que las ve el player: archivo que
+# escribe Demucs, key en R2, id y label de la pista. Separar en 4 no cuesta más
+# tiempo de GPU: htdemucs siempre calcula las 4 fuentes y --two-stems solo las
+# mezcla al final.
+STEM_LAYOUTS = {
+    2: [
+        ("no_vocals.mp3", "Instrumental.mp3", "instrumental", "Instrumental"),
+        ("vocals.mp3", "Voz.mp3", "voz", "Voz"),
+    ],
+    4: [
+        ("drums.mp3", "drums.mp3", "bateria", "Batería"),
+        ("bass.mp3", "bass.mp3", "bajo", "Bajo"),
+        ("other.mp3", "other.mp3", "otros", "Otros"),
+        ("vocals.mp3", "vocals.mp3", "voz", "Voz"),
+    ],
+}
+
+
 def _r2_client():
     import boto3
 
@@ -84,8 +102,13 @@ def process_song(
     title: str,
     artist: str,
     bpm,
+    stems: int = 2,
 ) -> None:
     import requests as req
+
+    layout = STEM_LAYOUTS.get(stems)
+    if layout is None:
+        raise ValueError(f"stems inválido: {stems} (esperado {sorted(STEM_LAYOUTS)})")
 
     s3 = _r2_client()
     bucket = os.environ["R2_BUCKET_NAME"]
@@ -113,9 +136,10 @@ def process_song(
                 with open(audio_path, "wb") as f:
                     f.write(r.content)
 
-            _write_status(s3, job_id, {"status": "running", "progress": 5, "phase": "Separando pistas con Demucs..."})
+            _write_status(s3, job_id, {"status": "running", "progress": 5, "phase": f"Separando en {stems} pistas con Demucs..."})
 
-            cmd = ["demucs", "--mp3", "--two-stems=vocals", "-n", "htdemucs_ft", "-o", out_dir, audio_path]
+            cmd = ["demucs", "--mp3", *(["--two-stems=vocals"] if stems == 2 else []),
+                   "-n", "htdemucs_ft", "-o", out_dir, audio_path]
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
             output_lines: list[str] = []
@@ -126,7 +150,7 @@ def process_song(
                 m = re.match(r"\s*(\d+)%", line)
                 if m:
                     pct = max(5, min(95, int(m.group(1))))
-                    _write_status(s3, job_id, {"status": "running", "progress": pct, "phase": "Separando pistas con Demucs..."})
+                    _write_status(s3, job_id, {"status": "running", "progress": pct, "phase": f"Separando en {stems} pistas con Demucs..."})
 
             proc.wait()
             if proc.returncode != 0:
@@ -136,10 +160,14 @@ def process_song(
             _write_status(s3, job_id, {"status": "running", "progress": 95, "phase": "Subiendo pistas a R2..."})
 
             stems_dir = os.path.join(out_dir, "htdemucs_ft", job_id)
-            with open(os.path.join(stems_dir, "vocals.mp3"), "rb") as f:
-                s3.put_object(Bucket=bucket, Key=f"songs/{slug}/Voz.mp3", Body=f.read(), ContentType="audio/mpeg")
-            with open(os.path.join(stems_dir, "no_vocals.mp3"), "rb") as f:
-                s3.put_object(Bucket=bucket, Key=f"songs/{slug}/Instrumental.mp3", Body=f.read(), ContentType="audio/mpeg")
+            for src_name, r2_name, _, _ in layout:
+                with open(os.path.join(stems_dir, src_name), "rb") as f:
+                    s3.put_object(
+                        Bucket=bucket,
+                        Key=f"songs/{slug}/{r2_name}",
+                        Body=f.read(),
+                        ContentType="audio/mpeg",
+                    )
 
         _write_status(s3, job_id, {"status": "running", "progress": 98, "phase": "Guardando en Convex..."})
 
@@ -150,8 +178,8 @@ def process_song(
             slug=slug,
             bpm=bpm,
             tracks=[
-                {"id": "instrumental", "label": "Instrumental", "file": f"songs/{slug}/Instrumental.mp3", "defaultVolume": 0.5},
-                {"id": "voz", "label": "Voz", "file": f"songs/{slug}/Voz.mp3", "defaultVolume": 0.5},
+                {"id": track_id, "label": label, "file": f"songs/{slug}/{r2_name}", "defaultVolume": 0.5}
+                for _, r2_name, track_id, label in layout
             ],
         )
 
@@ -178,6 +206,7 @@ class SubmitRequest(BaseModel):
     title: str
     artist: str
     bpm: int | None = None
+    stems: int = 2
 
 
 @app.function(image=image)
@@ -190,5 +219,6 @@ def submit(item: SubmitRequest) -> dict:
         title=item.title,
         artist=item.artist,
         bpm=item.bpm,
+        stems=item.stems,
     )
     return {"jobId": item.jobId}

@@ -11,6 +11,10 @@ function countLabel(n: number): string {
   return n === 1 ? '1 canción' : `${n} canciones`
 }
 
+function trackLabel(n: number): string {
+  return n === 1 ? '1 pista' : `${n} pistas`
+}
+
 export default function SongListClient({ songs }: { songs: SongIndex[] }) {
   const [query, setQuery] = useState('')
   const [openArtists, setOpenArtists] = useState<Set<string>>(new Set())
@@ -118,6 +122,11 @@ export default function SongListClient({ songs }: { songs: SongIndex[] }) {
                         <span className="text-sm font-medium text-zinc-300 truncate">
                           {song.title}
                         </span>
+                        {song.trackCount !== undefined && (
+                          <span className="ml-2 text-[11px] text-zinc-500 flex-shrink-0 tabular-nums">
+                            {trackLabel(song.trackCount)}
+                          </span>
+                        )}
                       </Link>
                     ))}
                   </div>
