@@ -135,6 +135,15 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Prod path: Modal worker ───────────────────────────────────────────────
+  // Bajar de YouTube es solo local: desde la IP de datacenter de Modal la descarga
+  // se bloquea, y las cookies de sesión que lo destrabarían viven en el Firefox local.
+  if (youtubeUrl) {
+    return NextResponse.json(
+      { error: 'La descarga desde YouTube solo funciona en local. Subí el MP3.' },
+      { status: 400 },
+    )
+  }
+
   if (!process.env.MODAL_WEBHOOK_URL) {
     return NextResponse.json({ error: 'MODAL_WEBHOOK_URL no configurado' }, { status: 500 })
   }
@@ -144,10 +153,7 @@ export async function POST(req: NextRequest) {
   const presetJobId = (formData.get('jobId') as string | null)?.trim()
   const jobId = presetJobId ?? crypto.randomUUID()
 
-  let audioUrl: string = youtubeUrl ?? ''
-  if (audioKey) {
-    audioUrl = `${process.env.NEXT_PUBLIC_R2_URL}/${audioKey}`
-  }
+  const audioUrl = audioKey ? `${process.env.NEXT_PUBLIC_R2_URL}/${audioKey}` : ''
 
   let chordsKey: string | undefined
   try {

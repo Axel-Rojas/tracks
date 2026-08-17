@@ -29,7 +29,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputCls =
   'bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-green-500 w-full'
 
-export default function StudioClient({ youtubeEnabled, isDev }: { youtubeEnabled: boolean; isDev: boolean }) {
+export default function StudioClient({ isDev }: { isDev: boolean }) {
   const songs = useQuery(api.songs.listPublic)
   const artists = [...new Set((songs ?? []).map((s) => s.artist))].sort()
 
@@ -315,7 +315,7 @@ export default function StudioClient({ youtubeEnabled, isDev }: { youtubeEnabled
         <section className="flex flex-col gap-3 p-4 bg-zinc-800/50 rounded-xl border border-zinc-700">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-zinc-300">Canción</h2>
-            {youtubeEnabled && (
+            {isDev && (
               <div className="flex rounded-lg overflow-hidden border border-zinc-700 text-xs">
                 <button
                   type="button"

@@ -136,16 +136,18 @@ python scripts/add_song.py path/to/song.mp3 --title "Title" --artist "Artist" --
 python scripts/add_song.py --youtube-url "https://youtu.be/..." --title "Title" --artist "Artist"
 ```
 
-For MP3 input the script converts to WAV first (required for Python 3.13+ torchaudio compatibility). For YouTube input the audio is downloaded directly as WAV via yt-dlp, skipping conversion. Demucs runs with `--two-stems=vocals`, outputs are renamed to `Voz.mp3` and `Instrumental.mp3`, `metadata.json` is written, and the entry is inserted at the top of `songs.json`. The temporary WAV is discarded automatically.
+For MP3 input the script converts to WAV first (required for Python 3.13+ torchaudio compatibility). For YouTube input the audio is downloaded directly as WAV via yt-dlp, skipping conversion. YouTube downloads reuse the logged-in session from Firefox by default (`--cookies-from-browser firefox`); pass `--cookies-from-browser none` to download anonymously, or another browser name to read cookies from it instead. Demucs runs with `--two-stems=vocals`, outputs are renamed to `Voz.mp3` and `Instrumental.mp3`, `metadata.json` is written, and the entry is inserted at the top of `songs.json`. The temporary WAV is discarded automatically.
 
 After processing, commit the new song directory and updated `songs.json` to deploy to Vercel.
 
 ### Prerequisites for song processing
 
 ```bash
-pip install demucs yt-dlp
+pip install demucs yt-dlp yt-dlp-ejs
 winget install ffmpeg   # Windows — must be in PATH before starting the dev server
 ```
+
+`yt-dlp-ejs` plus a JS runtime (Node, Deno or Bun — the script picks whichever is installed) are required for YouTube downloads: with session cookies YouTube always serves signed URLs, and without a runtime to solve the signature challenge no audio format is available.
 
 ## Development
 

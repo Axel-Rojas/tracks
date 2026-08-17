@@ -7,10 +7,13 @@ Uso:
     python scripts/add_song.py --youtube-url "https://youtu.be/..." --title "Nombre" --artist "Artista"
     python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista" --bpm 120
     python scripts/add_song.py cancion.mp3 --title "Nombre" --artist "Artista" --jobs 2
+    python scripts/add_song.py --youtube-url "..." --title "N" --artist "A" --cookies-from-browser none
 
 Requiere:
-    pip install demucs yt-dlp boto3
+    pip install demucs yt-dlp yt-dlp-ejs boto3
     ffmpeg instalado en el PATH (winget install ffmpeg)
+    Para bajar de YouTube: sesión iniciada en Firefox (yt-dlp lee sus cookies) y
+    un runtime JS (node, deno o bun) para resolver los challenges de firma.
 
 Variables de entorno (en .env.local o exportadas):
     CF_ACCOUNT_ID
@@ -39,6 +42,9 @@ if hasattr(sys.stderr, 'buffer'):
 
 REPO_ROOT = Path(__file__).parent.parent
 R2_BUCKET = 'tracks-app'
+
+# Navegador del que yt-dlp toma las cookies para bajar de YouTube.
+DEFAULT_COOKIES_BROWSER = 'firefox'
 
 # Tope de jobs paralelos de Demucs en CPU. Cada job suma uso de RAM, así que
 # más allá de 4 el cuello de botella suele ser memoria, no cores.
@@ -126,7 +132,33 @@ def check_boto3():
         sys.exit(1)
 
 
-def download_from_youtube(url: str, out_dir: Path) -> Path:
+def cookie_opts(browser: str | None) -> dict:
+    """Opciones de cookies para yt-dlp.
+
+    YouTube rechaza cada vez más descargas anónimas ("Sign in to confirm you're not
+    a bot"); reusando la sesión ya logueada del navegador la descarga pasa. Firefox
+    guarda cookies.sqlite sin cifrado ligado al SO, así que yt-dlp puede leerlas
+    aunque el navegador esté abierto (a diferencia de Chrome en Windows).
+    """
+    if not browser or browser.lower() == "none":
+        return {}
+    return {"cookiesfrombrowser": (browser.lower(), None, None, None)}
+
+
+def js_runtime_opts() -> dict:
+    """Runtime JS para que yt-dlp resuelva los challenges de firma de YouTube.
+
+    Con cookies de sesión YouTube siempre entrega URLs firmadas, así que sin runtime
+    no aparece ningún formato de audio. yt-dlp sólo habilita deno por default; acá
+    usamos el primero que haya instalado.
+    """
+    for name in ("deno", "node", "bun"):
+        if shutil.which(name):
+            return {"js_runtimes": {name: {}}}
+    return {}
+
+
+def download_from_youtube(url: str, out_dir: Path, cookies_browser: str | None = DEFAULT_COOKIES_BROWSER) -> Path:
     try:
         import yt_dlp
     except ImportError:
@@ -146,10 +178,19 @@ def download_from_youtube(url: str, out_dir: Path) -> Path:
             "preferredquality": "0",
         }],
         "postprocessor_args": {"FFmpegExtractAudio": ["-ar", "44100", "-ac", "2"]},
+        **cookie_opts(cookies_browser),
+        **js_runtime_opts(),
     }
-    print("\n>> Descargando audio desde YouTube...")
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ret = ydl.download([url])
+    origen = f" (usando cookies de {cookies_browser})" if cookie_opts(cookies_browser) else ""
+    print(f"\n>> Descargando audio desde YouTube{origen}...")
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ret = ydl.download([url])
+    except yt_dlp.utils.DownloadError as e:
+        print(f"ERROR: yt-dlp falló al descargar el audio.\n  {e}")
+        if cookies_browser:
+            print(f"  Si el problema son las cookies de {cookies_browser}, reintentá con --cookies-from-browser none")
+        sys.exit(1)
     if ret != 0:
         print("ERROR: yt-dlp falló al descargar el audio.")
         sys.exit(1)
@@ -290,6 +331,9 @@ def main():
     parser.add_argument("--jobs", "-j", type=int, default=None,
                         help=f"Jobs paralelos de Demucs en CPU (default: {default_jobs()} en esta máquina). "
                              "Más jobs = más rápido pero más RAM; bajalo a 1-2 si te quedás sin memoria.")
+    parser.add_argument("--cookies-from-browser", dest="cookies_browser", default=DEFAULT_COOKIES_BROWSER,
+                        help=f"Navegador del que sacar las cookies de YouTube (default: {DEFAULT_COOKIES_BROWSER}). "
+                             "Usá 'none' para descargar sin cookies.")
     args = parser.parse_args()
 
     jobs = args.jobs if args.jobs and args.jobs > 0 else default_jobs()
@@ -311,7 +355,7 @@ def main():
         tmp_path = Path(tmp)
 
         if args.youtube_url:
-            input_file = download_from_youtube(args.youtube_url, tmp_path)
+            input_file = download_from_youtube(args.youtube_url, tmp_path, args.cookies_browser)
         else:
             input_file = Path(args.input).resolve()
             if not input_file.exists():

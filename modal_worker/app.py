@@ -103,17 +103,10 @@ def process_song(
             os.makedirs(out_dir)
 
             if "youtube.com" in audio_url or "youtu.be" in audio_url:
-                yt_cmd = ["yt-dlp", "-x", "--audio-format", "mp3", "-o", audio_path]
-                # Download cookies from R2 if available
-                cookies_path = "/tmp/youtube-cookies.txt"
-                try:
-                    cookies_obj = s3.get_object(Bucket=bucket, Key="config/youtube-cookies.txt")
-                    with open(cookies_path, "wb") as cf:
-                        cf.write(cookies_obj["Body"].read())
-                    yt_cmd += ["--cookies", cookies_path]
-                except Exception:
-                    pass  # proceed without cookies (will likely fail on datacenter IPs)
-                yt_cmd.append(audio_url)
+                # No cookies here: the YouTube flow is local-only (scripts/add_song.py
+                # reads the Firefox session). From a datacenter IP this download will
+                # likely be blocked — in prod, upload the audio to R2 instead.
+                yt_cmd = ["yt-dlp", "-x", "--audio-format", "mp3", "-o", audio_path, audio_url]
                 result = subprocess.run(yt_cmd, capture_output=True, text=True)
                 if result.returncode != 0:
                     raise RuntimeError(f"yt-dlp falló (código {result.returncode}):\n{result.stderr[-2000:]}")
