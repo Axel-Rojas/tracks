@@ -5,7 +5,6 @@ import { spawn } from 'child_process'
 import path from 'path'
 import os from 'os'
 import crypto from 'crypto'
-import { uploadToR2 } from '@/lib/r2'
 import type { SSEEvent } from '@/lib/types'
 
 export async function POST(req: NextRequest) {
@@ -16,20 +15,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid form data' }, { status: 400 })
   }
 
-  if (process.env.NODE_ENV !== 'development') {
-    const secret = (formData.get('secret') as string | null)?.trim()
-    if (!process.env.STUDIO_SECRET || secret !== process.env.STUDIO_SECRET) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-  }
-
   const slug = (formData.get('id') as string | null)?.trim()
   const title = (formData.get('title') as string | null)?.trim()
   const artist = (formData.get('artist') as string | null)?.trim()
   const bpmStr = (formData.get('bpm') as string | null)?.trim()
   const bpm = bpmStr ? parseInt(bpmStr) : undefined
   const songFile = formData.get('song') as File | null
-  const chordsFile = formData.get('chords') as File | null
   const youtubeUrl = (formData.get('youtubeUrl') as string | null)?.trim() || null
   const audioKeyEarly = (formData.get('audioKey') as string | null)?.trim() || null
 
@@ -155,22 +146,11 @@ export async function POST(req: NextRequest) {
 
   const audioUrl = audioKey ? `${process.env.NEXT_PUBLIC_R2_URL}/${audioKey}` : ''
 
-  let chordsKey: string | undefined
-  try {
-    if (chordsFile instanceof File && chordsFile.size > 0) {
-      const chordsBuffer = Buffer.from(await chordsFile.arrayBuffer())
-      chordsKey = `songs/${slug}/${path.basename(chordsFile.name)}`
-      await uploadToR2(chordsKey, chordsBuffer, 'application/pdf')
-    }
-  } catch {
-    return NextResponse.json({ error: 'Error subiendo acordes a R2' }, { status: 500 })
-  }
-
   try {
     const modalRes = await fetch(process.env.MODAL_WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ audioUrl, jobId, slug, title, artist, bpm, chordsKey }),
+      body: JSON.stringify({ audioUrl, jobId, slug, title, artist, bpm }),
     })
 
     if (!modalRes.ok) {

@@ -43,7 +43,7 @@ def _write_status(s3, job_id: str, data: dict) -> None:
     )
 
 
-def _seed_convex(convex_url: str, title: str, artist: str, slug: str, bpm, chords_key, tracks: list) -> None:
+def _seed_convex(convex_url: str, title: str, artist: str, slug: str, bpm, tracks: list) -> None:
     import requests as req
 
     args = {
@@ -55,8 +55,6 @@ def _seed_convex(convex_url: str, title: str, artist: str, slug: str, bpm, chord
     }
     if bpm is not None:
         args["bpm"] = bpm
-    if chords_key is not None:
-        args["chordsFile"] = chords_key
 
     res = req.post(
         f"{convex_url}/api/mutation",
@@ -86,7 +84,6 @@ def process_song(
     title: str,
     artist: str,
     bpm,
-    chords_key,
 ) -> None:
     import requests as req
 
@@ -152,7 +149,6 @@ def process_song(
             artist=artist,
             slug=slug,
             bpm=bpm,
-            chords_key=chords_key,
             tracks=[
                 {"id": "instrumental", "label": "Instrumental", "file": f"songs/{slug}/Instrumental.mp3", "defaultVolume": 0.5},
                 {"id": "voz", "label": "Voz", "file": f"songs/{slug}/Voz.mp3", "defaultVolume": 0.5},
@@ -182,7 +178,6 @@ class SubmitRequest(BaseModel):
     title: str
     artist: str
     bpm: int | None = None
-    chordsKey: str | None = None
 
 
 @app.function(image=image)
@@ -195,6 +190,5 @@ def submit(item: SubmitRequest) -> dict:
         title=item.title,
         artist=item.artist,
         bpm=item.bpm,
-        chords_key=item.chordsKey,
     )
     return {"jobId": item.jobId}

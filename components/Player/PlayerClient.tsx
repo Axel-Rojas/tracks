@@ -11,7 +11,6 @@ import { useRegionsCrud } from '@/hooks/useRegionsCrud'
 import MultiTrackWaveform from '@/components/Player/MultiTrackWaveform'
 import TransportBar from '@/components/Player/TransportBar'
 import SongSidebar from '@/components/Player/SongSidebar'
-import ChordsPanel from '@/components/Player/ChordsPanel'
 import BpmTapModal from '@/components/Player/BpmTapModal'
 import MarkersSection from '@/components/Player/MarkersSection'
 import RegionsSection from '@/components/Player/RegionsSection'
@@ -24,7 +23,6 @@ interface Props {
 }
 
 interface UIState {
-  chordsOpen: boolean
   sidebarOpen: boolean
   tapModalOpen: boolean
   markersSectionOpen: boolean
@@ -43,7 +41,6 @@ function uiReducer(state: UIState, action: UIAction): UIState {
 }
 
 const initialUI: UIState = {
-  chordsOpen: false,
   sidebarOpen: false,
   tapModalOpen: false,
   markersSectionOpen: false,
@@ -59,7 +56,10 @@ export default function PlayerClient({ meta, songs }: Props) {
   const [activeRegionId, setActiveRegionId] = useState<string | null>(null)
   const [markersVisible, setMarkersVisible] = useState(true)
   const [regionsVisible, setRegionsVisible] = useState(true)
-  const [localBpm, setLocalBpm] = useState<number | null>(null)
+  // El BPM vive solo en `persisted`: save() ya actualiza ese estado al toque
+  // (solo debouncea la escritura a localStorage), así que duplicarlo en un
+  // useState obligaba a hidratarlo con un setState dentro de un effect.
+  const localBpm = persisted.localBpm
   const effectiveBpm = localBpm ?? meta.bpm ?? PLAYBACK.DEFAULT_BPM
 
   const markers = useMarkersCrud({
@@ -95,7 +95,6 @@ export default function PlayerClient({ meta, songs }: Props) {
     if (engine.state !== 'ready') return
     if (persisted.localMarkers.length > 0) markers.hydrate(persisted.localMarkers)
     if (persisted.localRegions.length > 0) regions.hydrate(persisted.localRegions)
-    if (persisted.localBpm) setLocalBpm(persisted.localBpm)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine.state])
 
@@ -136,7 +135,6 @@ export default function PlayerClient({ meta, songs }: Props) {
   }, [regions, activeRegionId, handleSetActiveRegion])
 
   const handleConfirmBpm = useCallback((bpm: number) => {
-    setLocalBpm(bpm)
     save({ localBpm: bpm })
   }, [save])
 
@@ -172,14 +170,6 @@ export default function PlayerClient({ meta, songs }: Props) {
             {effectiveBpm !== PLAYBACK.DEFAULT_BPM || localBpm ? `${effectiveBpm} bpm` : 'TAP bpm'}
           </button>
 
-          {meta.chordsFile && (
-            <button
-              onClick={() => dispatch({ type: 'set', key: 'chordsOpen', value: true })}
-              className="flex-shrink-0 h-8 px-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs text-zinc-300 touch-manipulation"
-            >
-              Acordes
-            </button>
-          )}
         </header>
 
         {engine.error && (
@@ -209,6 +199,7 @@ export default function PlayerClient({ meta, songs }: Props) {
             onRegionUpdate={regions.updateRegionBounds}
             engineState={engine.state}
             loadingProgress={engine.loadingProgress}
+            peaks={engine.peaks}
           />
         </div>
 
@@ -269,13 +260,6 @@ export default function PlayerClient({ meta, songs }: Props) {
           />
         </div>
       </div>
-
-      {ui.chordsOpen && meta.chordsFile && (
-        <ChordsPanel
-          chordsFile={meta.chordsFile}
-          onClose={() => dispatch({ type: 'set', key: 'chordsOpen', value: false })}
-        />
-      )}
 
       {ui.tapModalOpen && (
         <BpmTapModal

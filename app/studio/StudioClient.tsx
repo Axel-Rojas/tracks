@@ -34,16 +34,13 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
   const artists = [...new Set((songs ?? []).map((s) => s.artist))].sort()
 
   const songInputRef = useRef<HTMLInputElement>(null)
-  const chordsInputRef = useRef<HTMLInputElement>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const [title, setTitle] = useState('')
   const [artist, setArtist] = useState('')
   const [bpm, setBpm] = useState('')
   const [id, setId] = useState('')
-  const [secret, setSecret] = useState('')
   const [songFile, setSongFile] = useState<File | null>(null)
-  const [chordsFile, setChordsFile] = useState<File | null>(null)
   const [youtubeMode, setYoutubeMode] = useState(false)
   const [youtubeUrl, setYoutubeUrl] = useState('')
 
@@ -77,10 +74,8 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
     setBpm('')
     setId('')
     setSongFile(null)
-    setChordsFile(null)
     setYoutubeUrl('')
     if (songInputRef.current) songInputRef.current.value = ''
-    if (chordsInputRef.current) chordsInputRef.current.value = ''
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -110,11 +105,7 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
     let presignedJobId: string | undefined
     if (!isDev && !youtubeMode && songFile) {
       try {
-        const presignRes = await fetch('/api/studio/presign', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ secret }),
-        })
+        const presignRes = await fetch('/api/studio/presign', { method: 'POST' })
         if (!presignRes.ok) {
           const { error } = await presignRes.json() as { error?: string }
           setResult({ ok: false, message: error ?? 'Error obteniendo URL de subida' })
@@ -147,7 +138,6 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
     fd.append('id', id)
     fd.append('title', title)
     fd.append('artist', artist)
-    if (!isDev) fd.append('secret', secret)
     if (bpm) fd.append('bpm', bpm)
     if (youtubeMode) {
       fd.append('youtubeUrl', youtubeUrl.trim())
@@ -157,7 +147,6 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
       fd.append('audioKey', audioKey!)
       fd.append('jobId', presignedJobId!)
     }
-    if (chordsFile) fd.append('chords', chordsFile, chordsFile.name)
 
     let res: Response
     try {
@@ -384,54 +373,6 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
             </>
           )}
         </section>
-
-        {/* Chords PDF */}
-        <section className="flex flex-col gap-3 p-4 bg-zinc-800/50 rounded-xl border border-zinc-700">
-          <h2 className="text-sm font-semibold text-zinc-300">Acordes (PDF) — opcional</h2>
-          <input
-            ref={chordsInputRef}
-            type="file"
-            accept="application/pdf,.pdf"
-            className="hidden"
-            onChange={(e) => setChordsFile(e.target.files?.[0] ?? null)}
-          />
-          {chordsFile ? (
-            <div className="flex items-center gap-2 bg-zinc-800 rounded-lg px-3 py-2">
-              <span className="text-sm text-green-400 flex-1 truncate">{chordsFile.name}</span>
-              <button
-                type="button"
-                onClick={() => { setChordsFile(null); if (chordsInputRef.current) chordsInputRef.current.value = '' }}
-                className="text-zinc-500 hover:text-red-400"
-              >
-                <X size={14} />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => chordsInputRef.current?.click()}
-              className="border-2 border-dashed border-zinc-600 rounded-lg py-4 text-sm text-zinc-500 hover:border-zinc-500 hover:text-zinc-400 transition-colors"
-            >
-              Seleccionar PDF...
-            </button>
-          )}
-        </section>
-
-        {/* Access token — solo en prod */}
-        {!isDev && (
-          <section className="p-4 bg-zinc-800/50 rounded-xl border border-zinc-700">
-            <Field label="Token de acceso">
-              <input
-                type="password"
-                className={inputCls}
-                placeholder="••••••••"
-                value={secret}
-                onChange={(e) => setSecret(e.target.value)}
-                required
-              />
-            </Field>
-          </section>
-        )}
 
         {/* Submit */}
         <div className="flex flex-col gap-3">

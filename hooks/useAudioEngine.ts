@@ -75,6 +75,11 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
   const [globalVolume, setGlobalVolumeState] = useState(1)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const durationRef = useRef(0)
+  // Canal 0 ya decodificado de cada pista. Es una vista sobre el AudioBuffer que
+  // el engine tiene igual, así que no cuesta memoria extra: se lo pasamos a
+  // wavesurfer para que dibuje sin volver a descargar ni decodificar el mp3.
+  const [peaks, setPeaks] = useState<Float32Array[]>([])
   const [loadingProgress, setLoadingProgress] = useState<number[]>([])
   const loadingProgressRawRef = useRef<number[]>([])
   const progressRafRef = useRef<number>(0)
@@ -86,13 +91,16 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
     gain.gain.value = localVolsRef.current[i] * globalVolumeRef.current * (mutedRef.current[i] ? 0 : 1)
   }
 
-  const tick = useCallback(() => {
+  // `function loop` en vez de referenciar `tick` desde adentro: así el rAF se
+  // reagenda solo, sin depender de la identidad del callback. Y la duración se
+  // lee de un ref, con lo cual el loop no necesita recrearse nunca.
+  const tick = useCallback(function loop() {
     const ctx = ctxRef.current
     if (!ctx || ctx.state !== 'running') return
     const t = offsetRef.current + (ctx.currentTime - startedAtRef.current)
-    setCurrentTime(Math.min(t, duration))
-    rafRef.current = requestAnimationFrame(tick)
-  }, [duration])
+    setCurrentTime(Math.min(t, durationRef.current))
+    rafRef.current = requestAnimationFrame(loop)
+  }, [])
 
   const stopTick = () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
@@ -102,6 +110,7 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
     if (tracks.length === 0) return
     setState('loading')
     setError(null)
+    setPeaks([])
     loadingProgressRawRef.current = tracks.map(() => 0)
     setLoadingProgress(tracks.map(() => 0))
 
@@ -147,7 +156,10 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
       .then((buffers) => {
         if (cancelled) return
         buffersRef.current = buffers
-        setDuration(Math.max(...buffers.map((b) => b.duration)))
+        const dur = Math.max(...buffers.map((b) => b.duration))
+        durationRef.current = dur
+        setDuration(dur)
+        setPeaks(buffers.map((b) => b.getChannelData(0)))
         stateRef.current = 'ready'
         setState('ready')
       })
@@ -294,6 +306,7 @@ export function useAudioEngine({ songId, tracks }: AudioEngineOptions) {
   return {
     state,
     error,
+    peaks,
     loadingProgress,
     currentTime,
     duration,

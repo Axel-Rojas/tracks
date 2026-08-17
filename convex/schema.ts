@@ -9,7 +9,6 @@ export default defineSchema({
     bpm: v.optional(v.number()),
     isPublic: v.boolean(),
     ownerId: v.optional(v.string()),
-    chordsFile: v.optional(v.string()),
     tracks: v.array(v.object({
       id: v.string(),
       label: v.string(),

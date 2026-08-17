@@ -22,11 +22,17 @@ export function usePlayerState(songId: string) {
   const [persisted, setPersisted] = useState<PersistedState>(defaultState)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // El setState va sí o sí en un effect: la página se prerenderiza en el server,
+  // donde no existe localStorage. Leerlo en un initializer de useState o durante
+  // el render rompería el SSR o daría hydration mismatch. La alternativa formal
+  // sería useSyncExternalStore, pero este hook también escribe (con debounce),
+  // así que no es un store externo puro.
   useEffect(() => {
     try {
       const raw = localStorage.getItem(key)
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<PersistedState>
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setPersisted({ ...defaultState(), ...parsed })
       }
     } catch { /* ignore */ }

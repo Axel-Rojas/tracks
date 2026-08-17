@@ -26,7 +26,6 @@ export interface SongMeta {
   artist: string
   bpm?: number
   tracks: Track[]
-  chordsFile?: string
 }
 
 export interface SongIndex {

@@ -21,14 +21,12 @@ Deployed to Vercel. Song processing (stem separation) is a local-only developmen
 - Song sidebar grouped by artist (alphabetical), collapsible per-artist dropdowns
 - BPM tap detection and metronome with adjustable volume
 - Count-in (4-beat) before playback starts
-- Chords panel (PDF viewer) per song
 - Player state persisted to localStorage per song: local markers, local regions, BPM
 
 **Studio (dev only)**
 
 - Upload a raw MP3 or paste a YouTube URL; the server downloads and separates into stems using Demucs
 - Real-time processing progress streamed to the browser via Server-Sent Events (phase labels, progress bar, ETA)
-- Optional chords PDF upload
 - Creates the song directory, audio files, and metadata.json automatically; updates songs.json; invalidates the home page cache
 
 **PWA**
@@ -57,7 +55,6 @@ components/Player/
   SongSidebar.tsx         Song navigation sidebar grouped by artist
   RegionsSection.tsx      Region list UI (create, edit, delete, activate, visibility toggle)
   MarkersSection.tsx      Marker list UI (visibility toggle)
-  ChordsPanel.tsx         PDF chords viewer
   BpmTapModal.tsx         BPM detection by tapping
 
 hooks/
@@ -80,10 +77,9 @@ lib/
 public/
   songs.json              Ordered list of all songs (id, title, artist)
   songs/{id}/
-    metadata.json         Song definition (tracks, markers, regions, bpm, chordsFile)
+    metadata.json         Song definition (tracks, markers, regions, bpm)
     Voz.mp3               Vocals stem
     Instrumental.mp3      Instrumental stem
-    [acordes.pdf]         Optional chords file
   manifest.json           PWA manifest
   sw.js                   Service worker
   icon.svg                App icon
@@ -109,8 +105,7 @@ Each song is defined by `public/songs/{id}/metadata.json`:
   "markers": [{ "time": 32.5, "label": "Coro" }],
   "regions": [
     { "id": "region-1", "label": "Puente", "start": 64, "end": 96, "color": "rgba(96,165,250,0.20)" }
-  ],
-  "chordsFile": "acordes.pdf"
+  ]
 }
 ```
 

@@ -6,7 +6,6 @@ import WaveSurfer from 'wavesurfer.js'
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.js'
 import type { Marker, Region, Track } from '@/lib/types'
 import type { EngineState } from '@/hooks/useAudioEngine'
-import { rawUrl } from '@/lib/songs'
 import { TRACK_COLORS } from '@/lib/colors'
 
 interface Props {
@@ -26,6 +25,9 @@ interface Props {
   onRegionUpdate?: (id: string, start: number, end: number) => void
   engineState: EngineState
   loadingProgress: number[]
+  /** Canal ya decodificado por el engine, uno por pista. Evita que wavesurfer
+   *  vuelva a bajar y decodificar el mismo mp3. */
+  peaks: Float32Array[]
 }
 
 const MARKER_COLOR = 'rgba(255,255,255,0.9)'
@@ -71,6 +73,7 @@ export default function MultiTrackWaveform({
   onRegionUpdate,
   engineState,
   loadingProgress,
+  peaks,
 }: Props) {
   const containerRefs = useRef<(HTMLDivElement | null)[]>([])
   const wsInstances = useRef<WaveSurfer[]>([])
@@ -79,20 +82,31 @@ export default function MultiTrackWaveform({
   const [wsReadyState, setWsReadyState] = useState<boolean[]>([])
   const interactingRef = useRef(false)
   const markersRef = useRef(markers)
-  markersRef.current = markers
   const activeRegionRef = useRef(activeRegionId)
-  activeRegionRef.current = activeRegionId
   const regionsDataRef = useRef(regions)
-  regionsDataRef.current = regions
   const onRegionUpdateRef = useRef(onRegionUpdate)
-  onRegionUpdateRef.current = onRegionUpdate
+
+  // Espejo de las props para los callbacks de wavesurfer, que se registran una
+  // sola vez al crear la instancia y si no leerían valores viejos. Va en un
+  // effect y no en el render: escribir refs durante el render es un error.
+  useEffect(() => {
+    markersRef.current = markers
+    activeRegionRef.current = activeRegionId
+    regionsDataRef.current = regions
+    onRegionUpdateRef.current = onRegionUpdate
+  }, [markers, activeRegionId, regions, onRegionUpdate])
+
+  // Los peaks llegan del engine ya decodificados, así que este effect espera a
+  // que estén listos en vez de disparar su propia descarga.
+  const peaksReady = peaks.length === tracks.length && duration > 0
 
   useEffect(() => {
+    if (!peaksReady) return
+
     wsInstances.current.forEach((ws) => ws.destroy())
     wsInstances.current = []
     regionsPluginsRef.current = []
     wsReadyRef.current = []
-    setWsReadyState(tracks.map(() => false))
 
     tracks.forEach((track, i) => {
       const container = containerRefs.current[i]
@@ -112,11 +126,12 @@ export default function MultiTrackWaveform({
         height: 'auto',
         normalize: true,
         interact: isMain,
-        url: rawUrl(track.file),
+        // Sin `url`: dibuja con los peaks del engine. `duration` es obligatoria
+        // cuando no hay media, porque no la puede deducir del archivo.
+        peaks: [peaks[i]],
+        duration,
         plugins: [regionsPlugin],
       })
-
-      ws.setVolume(0)
 
       ws.on('ready', () => {
         wsReadyRef.current[i] = true
@@ -175,9 +190,11 @@ export default function MultiTrackWaveform({
     return () => {
       wsInstances.current.forEach((ws) => ws.destroy())
       wsInstances.current = []
+      wsReadyRef.current = []
+      setWsReadyState([])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [songId])
+  }, [songId, peaksReady])
 
   // Sync loop regions per track when regions change
   useEffect(() => {

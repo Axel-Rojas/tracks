@@ -43,7 +43,6 @@ export const getBySlug = query({
       artist: song.artist,
       bpm: song.bpm,
       tracks: song.tracks,
-      chordsFile: song.chordsFile,
     }
   },
 })
@@ -56,7 +55,6 @@ export const create = mutation({
     bpm: v.optional(v.number()),
     isPublic: v.boolean(),
     ownerId: v.optional(v.string()),
-    chordsFile: v.optional(v.string()),
     tracks: v.array(trackSchema),
   },
   handler: async (ctx, args) => {
@@ -104,7 +102,6 @@ export const seed = mutation({
     bpm: v.optional(v.number()),
     isPublic: v.boolean(),
     ownerId: v.optional(v.string()),
-    chordsFile: v.optional(v.string()),
     tracks: v.array(trackSchema),
   },
   handler: async (ctx, args) => {
