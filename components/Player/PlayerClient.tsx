@@ -16,6 +16,7 @@ import MarkersSection from '@/components/Player/MarkersSection'
 import RegionsSection from '@/components/Player/RegionsSection'
 import type { SongIndex, SongMeta } from '@/lib/types'
 import { PLAYBACK } from '@/lib/constants'
+import { saveLastSession } from '@/lib/lastSession'
 
 interface Props {
   meta: SongMeta
@@ -97,6 +98,12 @@ export default function PlayerClient({ meta, songs }: Props) {
     if (persisted.localRegions.length > 0) regions.hydrate(persisted.localRegions)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine.state])
+
+  // La sesión se registra cuando el audio suena de verdad: abrir la página y no
+  // darle play no cuenta como práctica. Cada play refresca el "hace x tiempo".
+  useEffect(() => {
+    if (engine.state === 'playing') saveLastSession(meta.id)
+  }, [engine.state, meta.id])
 
   const handleVolumeChange = useCallback(
     (index: number, value: number) => { engine.setVolume(index, value) },

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Search, Plus, ChevronDown, ChevronRight } from 'lucide-react'
 import type { SongIndex } from '@/lib/types'
 import { groupByArtist } from '@/lib/songs'
+import ResumeBanner from '@/components/SongList/ResumeBanner'
 
 function countLabel(n: number): string {
   return n === 1 ? '1 canción' : `${n} canciones`
@@ -42,6 +43,8 @@ export default function SongListClient({ songs }: { songs: SongIndex[] }) {
 
   return (
     <div className="flex flex-col gap-4">
+      <ResumeBanner songs={songs} />
+
       {/* Search + toolbar */}
       <div className="flex gap-2 items-center">
         <div className="relative flex-1">
