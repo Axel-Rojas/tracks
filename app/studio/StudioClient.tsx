@@ -326,28 +326,23 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
               </div>
             )}
           </div>
-          {/* Cantidad de stems: por ahora solo en dev, igual que el modo YouTube. */}
-          {isDev && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex rounded-lg overflow-hidden border border-zinc-700 text-xs">
-                {STEM_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setStems(opt.value)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${
-                      stems === opt.value ? 'bg-zinc-600 text-white' : 'text-zinc-400 hover:text-zinc-300'
-                    }`}
-                  >
-                    <AudioLines size={12} /> {opt.label}
-                  </button>
-                ))}
-              </div>
-              <span className="text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400">
-                en desarrollo
-              </span>
-            </div>
-          )}
+          {/* Cantidad de stems: anda igual en dev (script local) y en prod (worker
+              de Modal). Los dos resuelven el layout de pistas a partir del mismo
+              número, así que no hay nada que gatear por entorno. */}
+          <div className="flex self-start rounded-lg overflow-hidden border border-zinc-700 text-xs">
+            {STEM_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setStems(opt.value)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${
+                  stems === opt.value ? 'bg-zinc-600 text-white' : 'text-zinc-400 hover:text-zinc-300'
+                }`}
+              >
+                <AudioLines size={12} /> {opt.label}
+              </button>
+            ))}
+          </div>
 
           <p className="text-xs text-zinc-500">
             Demucs va a separar la pista en{' '}

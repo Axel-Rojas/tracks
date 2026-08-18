@@ -1,0 +1,12 @@
+# Dependencias LOCALES para deployar el worker, no las del runtime remoto.
+# La imagen que corre en Modal se define en app.py (demucs, torch, boto3,
+# requests, yt-dlp, fastapi) y se construye allá; acá solo va lo que tu máquina
+# necesita para que `modal deploy` pueda importar app.py y descubrir la app.
+#
+#   python -m pip install -r modal_worker/requirements.txt
+#
+# pydantic va explícito porque modal >= 1.5 dejó de traerlo como dependencia:
+# sin él el deploy corta con ModuleNotFoundError apuntando a app.py:8, que no
+# deja claro que el que falta es un paquete del cliente y no de la imagen.
+modal>=1.5
+pydantic>=2
