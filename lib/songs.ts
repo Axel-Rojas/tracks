@@ -25,6 +25,14 @@ export function groupByArtist(songs: SongIndex[]): [string, SongIndex[]][] {
 }
 
 /**
+ * Todas las canciones en una sola lista, alfabética por título (sin importar
+ * el artista). Copia el array: el que llega por props no se toca.
+ */
+export function sortByTitle(songs: SongIndex[]): SongIndex[] {
+  return [...songs].sort((a, b) => a.title.localeCompare(b.title, 'es'))
+}
+
+/**
  * Fetch JSON from a relative URL (client-side).
  */
 export async function fetchJson<T>(path: string): Promise<T> {

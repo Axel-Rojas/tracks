@@ -2,10 +2,17 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Search, Plus, ChevronDown, ChevronRight } from 'lucide-react'
+import { Search, Plus, ChevronDown, ChevronRight, Users, List } from 'lucide-react'
 import type { SongIndex } from '@/lib/types'
-import { groupByArtist } from '@/lib/songs'
+import { groupByArtist, sortByTitle } from '@/lib/songs'
 import ResumeBanner from '@/components/SongList/ResumeBanner'
+
+type ViewMode = 'artist' | 'all'
+
+const VIEWS: readonly { id: ViewMode; label: string; Icon: typeof Users }[] = [
+  { id: 'artist', label: 'Por artista', Icon: Users },
+  { id: 'all', label: 'Todas', Icon: List },
+]
 
 function countLabel(n: number): string {
   return n === 1 ? '1 canción' : `${n} canciones`
@@ -17,6 +24,7 @@ function trackLabel(n: number): string {
 
 export default function SongListClient({ songs }: { songs: SongIndex[] }) {
   const [query, setQuery] = useState('')
+  const [view, setView] = useState<ViewMode>('artist')
   const [openArtists, setOpenArtists] = useState<Set<string>>(new Set())
 
   const q = query.toLowerCase().trim()
@@ -35,7 +43,18 @@ export default function SongListClient({ songs }: { songs: SongIndex[] }) {
       .filter(([, list]) => list.length > 0)
   }, [allGroups, q])
 
-  const matchCount = groups.reduce((n, [, list]) => n + list.length, 0)
+  // Vista plana: alfabética por título, con el mismo criterio de búsqueda que
+  // la agrupada (matchea por título o por artista).
+  const flatSongs = useMemo(() => {
+    const sorted = sortByTitle(songs)
+    if (!q) return sorted
+    return sorted.filter(
+      (s) => s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q)
+    )
+  }, [songs, q])
+
+  const matchCount =
+    view === 'all' ? flatSongs.length : groups.reduce((n, [, list]) => n + list.length, 0)
 
   function toggleArtist(artist: string) {
     setOpenArtists((prev) => {
@@ -71,18 +90,62 @@ export default function SongListClient({ songs }: { songs: SongIndex[] }) {
         </Link>
       </div>
 
-      {/* Total (o cantidad de coincidencias mientras se busca) */}
+      {/* Total (o cantidad de coincidencias mientras se busca) + selector de vista */}
       {songs.length > 0 && (
-        <p className="text-xs text-zinc-500">
-          {query && matchCount === 0
-            ? 'Sin resultados'
-            : countLabel(query ? matchCount : songs.length)}
-        </p>
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-xs text-zinc-500">
+            {query && matchCount === 0
+              ? 'Sin resultados'
+              : countLabel(query ? matchCount : songs.length)}
+          </p>
+
+          <div
+            role="group"
+            aria-label="Agrupar canciones"
+            className="flex flex-shrink-0 gap-0.5 rounded-lg border border-zinc-700 bg-zinc-800 p-0.5"
+          >
+            {VIEWS.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                onClick={() => setView(id)}
+                aria-pressed={view === id}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors touch-manipulation ${
+                  view === id
+                    ? 'bg-zinc-700 text-white'
+                    : 'text-zinc-400 hover:text-zinc-200 active:bg-zinc-700/50'
+                }`}
+              >
+                <Icon size={14} className="flex-shrink-0" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
-      {/* Song list grouped by artist */}
-      {allGroups.length === 0 && !query ? (
+      {songs.length === 0 && !query ? (
         <p className="text-zinc-500 text-sm">No hay canciones cargadas.</p>
+      ) : view === 'all' ? (
+        // Una sola lista alfabética por título; el artista y las pistas van debajo.
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1 items-start">
+          {flatSongs.map((song) => (
+            <Link
+              key={song.id}
+              href={`/songs/${song.id}`}
+              className="block px-2 py-2 rounded-lg hover:bg-zinc-800 active:bg-zinc-700 touch-manipulation transition-colors"
+            >
+              <span className="block text-sm font-medium text-white truncate">
+                {song.title}
+              </span>
+              <span className="block text-xs text-zinc-500 truncate">
+                {song.artist}
+                {song.trackCount !== undefined && (
+                  <span className="tabular-nums"> · {trackLabel(song.trackCount)}</span>
+                )}
+              </span>
+            </Link>
+          ))}
+        </div>
       ) : (
         // Grid por filas: el orden alfabético se lee de izquierda a derecha.
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1 items-start">

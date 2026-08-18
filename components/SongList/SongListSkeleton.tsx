@@ -17,7 +17,11 @@ export default function SongListSkeleton() {
         </div>
       </div>
 
-      <div className="h-4 w-24 rounded bg-zinc-800/60 animate-pulse" />
+      {/* Contador + hueco del selector de vista, con la misma altura que el real. */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="h-4 w-24 rounded bg-zinc-800/60 animate-pulse" />
+        <div className="h-[34px] w-44 flex-shrink-0 rounded-lg border border-zinc-700 bg-zinc-800" />
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1 items-start">
         {Array.from({ length: 12 }).map((_, i) => (
