@@ -71,10 +71,10 @@ export default function MarkersSection({
     <>
       <div className="border-t border-zinc-800 flex-shrink-0">
         {/* Toggle bar */}
-        <div className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-zinc-800/50 active:bg-zinc-800 touch-manipulation transition-colors">
+        <div className="w-full flex items-center gap-1 px-2 py-2.5">
           <button
             onClick={onToggle}
-            className="flex items-center gap-2 flex-1 text-left"
+            className="flex items-center gap-2 flex-1 h-9 px-2 rounded-lg text-left hover:bg-zinc-800/50 active:bg-zinc-800 touch-manipulation transition-colors"
             aria-expanded={isOpen}
           >
             <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest flex-1 text-left">
@@ -83,17 +83,21 @@ export default function MarkersSection({
             <span className="text-zinc-600">{isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onToggleVisible() }}
-            className="h-9 w-9 flex items-center justify-center text-zinc-600 hover:text-zinc-300 touch-manipulation transition-colors"
+            onClick={onToggleVisible}
+            className={`h-9 w-9 flex-shrink-0 flex items-center justify-center rounded-lg touch-manipulation transition-colors ${
+              visible
+                ? 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 active:bg-zinc-700'
+                : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+            }`}
             aria-label={visible ? 'Ocultar marcadores' : 'Mostrar marcadores'}
           >
-            {visible ? <Eye size={14} /> : <EyeOff size={14} />}
+            {visible ? <Eye size={15} /> : <EyeOff size={15} />}
           </button>
         </div>
 
         {/* Add marker per track + marker chips */}
         {isOpen && (
-          <div className="px-3 pb-3 flex flex-col gap-2">
+          <div className="px-3 pt-2 pb-3 flex flex-col gap-2">
             <div className="flex gap-2 flex-wrap">
               {tracks.map((track, i) => {
                 const color = TRACK_COLORS[i % TRACK_COLORS.length].progress

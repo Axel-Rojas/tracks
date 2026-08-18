@@ -26,7 +26,7 @@ export default function SongLoading() {
 
         <div className="border-t border-zinc-800 flex-shrink-0">
           <div className="w-full flex items-center gap-2 px-4 py-2.5">
-            <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest flex-1">Regiones</span>
+            <span className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest flex-1">Secciones</span>
             <span className="text-zinc-600"><ChevronRight size={16} /></span>
           </div>
         </div>

@@ -6,7 +6,7 @@ export const TRACK_COLORS = [
   { wave: '#a78bfa55', progress: '#a78bfa' },
 ]
 
-export const REGION_PRESETS = [
+export const SECTION_PRESETS = [
   { solid: '#4ade80', rgba: 'rgba(74,222,128,0.20)' },
   { solid: '#60a5fa', rgba: 'rgba(96,165,250,0.20)' },
   { solid: '#fbbf24', rgba: 'rgba(251,191,36,0.20)' },
@@ -15,8 +15,8 @@ export const REGION_PRESETS = [
   { solid: '#f87171', rgba: 'rgba(248,113,113,0.20)' },
 ]
 
-export const DEFAULT_REGION_COLOR = REGION_PRESETS[0].rgba
+export const DEFAULT_SECTION_COLOR = SECTION_PRESETS[0].rgba
 
 export function solidFromRgba(rgba: string): string {
-  return REGION_PRESETS.find((p) => p.rgba === rgba)?.solid ?? '#4ade80'
+  return SECTION_PRESETS.find((p) => p.rgba === rgba)?.solid ?? '#4ade80'
 }

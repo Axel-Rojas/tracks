@@ -1,18 +1,23 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Marker, Region } from '@/lib/types'
+import type { Marker, Section } from '@/lib/types'
 import { UI } from '@/lib/constants'
 
 interface PersistedState {
   localMarkers: Marker[]
-  localRegions: Region[]
+  localSections: Section[]
   localBpm: number | null
+}
+
+/** Lo guardado antes de que "regiones" pasara a llamarse "secciones". */
+interface LegacyState {
+  localRegions?: Section[]
 }
 
 const defaultState = (): PersistedState => ({
   localMarkers: [],
-  localRegions: [],
+  localSections: [],
   localBpm: null,
 })
 
@@ -31,9 +36,12 @@ export function usePlayerState(songId: string) {
     try {
       const raw = localStorage.getItem(key)
       if (raw) {
-        const parsed = JSON.parse(raw) as Partial<PersistedState>
+        const { localRegions, ...parsed } = JSON.parse(raw) as Partial<PersistedState> & LegacyState
+        // Las secciones guardadas como `localRegions` siguen valiendo: se leen
+        // una vez y el primer save las reescribe con el nombre nuevo.
+        const migrated = parsed.localSections ?? localRegions
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setPersisted({ ...defaultState(), ...parsed })
+        setPersisted({ ...defaultState(), ...parsed, ...(migrated ? { localSections: migrated } : {}) })
       }
     } catch { /* ignore */ }
   }, [key])

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Volume2, VolumeX } from 'lucide-react'
 import WaveSurfer from 'wavesurfer.js'
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.js'
-import type { Marker, Region, Track } from '@/lib/types'
+import type { Marker, Section, Track } from '@/lib/types'
 import type { EngineState } from '@/hooks/useAudioEngine'
 import { TRACK_COLORS } from '@/lib/colors'
 
@@ -12,8 +12,8 @@ interface Props {
   songId: string
   tracks: Track[]
   markers: Marker[]
-  regions: Region[]
-  activeRegionId: string | null
+  sections: Section[]
+  activeSectionId: string | null
   currentTime: number
   duration: number
   volumes: number[]
@@ -21,8 +21,8 @@ interface Props {
   onSeek: (t: number) => void
   onVolumeChange: (i: number, v: number) => void
   onToggleMute: (i: number) => void
-  onSetActiveRegion: (id: string | null) => void
-  onRegionUpdate?: (id: string, start: number, end: number) => void
+  onSetActiveSection: (id: string | null) => void
+  onSectionUpdate?: (id: string, start: number, end: number) => void
   engineState: EngineState
   loadingProgress: number[]
   /** Canal ya decodificado por el engine, uno por pista. Evita que wavesurfer
@@ -52,16 +52,16 @@ function markerRegionOptions(m: Marker) {
   }
 }
 
-function regionsForTrack(regions: Region[], trackIndex: number) {
-  return regions.filter((r) => (r.trackIndex ?? 0) === trackIndex)
+function sectionsForTrack(sections: Section[], trackIndex: number) {
+  return sections.filter((r) => (r.trackIndex ?? 0) === trackIndex)
 }
 
 export default function MultiTrackWaveform({
   songId,
   tracks,
   markers,
-  regions,
-  activeRegionId,
+  sections,
+  activeSectionId,
   currentTime,
   duration,
   volumes,
@@ -69,8 +69,8 @@ export default function MultiTrackWaveform({
   onSeek,
   onVolumeChange,
   onToggleMute,
-  onSetActiveRegion,
-  onRegionUpdate,
+  onSetActiveSection,
+  onSectionUpdate,
   engineState,
   loadingProgress,
   peaks,
@@ -82,19 +82,19 @@ export default function MultiTrackWaveform({
   const [wsReadyState, setWsReadyState] = useState<boolean[]>([])
   const interactingRef = useRef(false)
   const markersRef = useRef(markers)
-  const activeRegionRef = useRef(activeRegionId)
-  const regionsDataRef = useRef(regions)
-  const onRegionUpdateRef = useRef(onRegionUpdate)
+  const activeSectionRef = useRef(activeSectionId)
+  const sectionsDataRef = useRef(sections)
+  const onSectionUpdateRef = useRef(onSectionUpdate)
 
   // Espejo de las props para los callbacks de wavesurfer, que se registran una
   // sola vez al crear la instancia y si no leerían valores viejos. Va en un
   // effect y no en el render: escribir refs durante el render es un error.
   useEffect(() => {
     markersRef.current = markers
-    activeRegionRef.current = activeRegionId
-    regionsDataRef.current = regions
-    onRegionUpdateRef.current = onRegionUpdate
-  }, [markers, activeRegionId, regions, onRegionUpdate])
+    activeSectionRef.current = activeSectionId
+    sectionsDataRef.current = sections
+    onSectionUpdateRef.current = onSectionUpdate
+  }, [markers, activeSectionId, sections, onSectionUpdate])
 
   // Los peaks llegan del engine ya decodificados, así que este effect espera a
   // que estén listos en vez de disparar su propia descarga.
@@ -146,8 +146,8 @@ export default function MultiTrackWaveform({
           regionsPlugin.addRegion(markerRegionOptions(m))
         })
 
-        // Loop regions — only those assigned to this track
-        regionsForTrack(regionsDataRef.current, i).forEach((r) => {
+        // Loop sections — only those assigned to this track
+        sectionsForTrack(sectionsDataRef.current, i).forEach((r) => {
           const isLocal = r.id.startsWith('local-')
           regionsPlugin.addRegion({
             id: r.id,
@@ -174,14 +174,14 @@ export default function MultiTrackWaveform({
 
       regionsPlugin.on('region-clicked', (region, e) => {
         e.stopPropagation()
-        if (regionsDataRef.current.some((r) => r.id === region.id)) {
-          onSetActiveRegion(activeRegionRef.current === region.id ? null : region.id)
+        if (sectionsDataRef.current.some((r) => r.id === region.id)) {
+          onSetActiveSection(activeSectionRef.current === region.id ? null : region.id)
           onSeek(region.start)
         }
       })
 
       regionsPlugin.on('region-updated', (region) => {
-        onRegionUpdateRef.current?.(region.id, region.start, region.end)
+        onSectionUpdateRef.current?.(region.id, region.start, region.end)
       })
 
       wsInstances.current[i] = ws
@@ -196,7 +196,7 @@ export default function MultiTrackWaveform({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [songId, peaksReady])
 
-  // Sync loop regions per track when regions change
+  // Sync loop sections per track when sections change
   useEffect(() => {
     tracks.forEach((_, i) => {
       const plugin = regionsPluginsRef.current[i]
@@ -204,7 +204,7 @@ export default function MultiTrackWaveform({
       plugin.getRegions().forEach((r) => {
         if (!r.id.startsWith('m::')) r.remove()
       })
-      regionsForTrack(regions, i).forEach((r) => {
+      sectionsForTrack(sections, i).forEach((r) => {
         const isLocal = r.id.startsWith('local-')
         plugin.addRegion({
           id: r.id,
@@ -217,7 +217,7 @@ export default function MultiTrackWaveform({
         })
       })
     })
-  }, [regions, tracks])
+  }, [sections, tracks])
 
   // Sync markers to each track's plugin when markers change
   useEffect(() => {
@@ -245,9 +245,9 @@ export default function MultiTrackWaveform({
     if (!plugin) return
     plugin.getRegions().forEach((r) => {
       const el = r.element as HTMLElement
-      el.style.opacity = !activeRegionId || r.id === activeRegionId ? '1' : '0.3'
+      el.style.opacity = !activeSectionId || r.id === activeSectionId ? '1' : '0.3'
     })
-  }, [activeRegionId])
+  }, [activeSectionId])
 
   return (
     // Con 4 stems las filas se reparten la misma altura: min-h las frena antes de

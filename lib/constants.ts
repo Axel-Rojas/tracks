@@ -14,7 +14,7 @@ export const PLAYBACK = {
   SEEK_TOLERANCE: 0.5,
   COUNT_IN_BEATS: 4,
   DEFAULT_BPM: 80,
-  NEW_REGION_DURATION: 30,
+  MIN_SECTION_DURATION: 0.5,
 } as const
 
 export const UI = {

@@ -5,15 +5,15 @@ import { Menu } from 'lucide-react'
 import { useAudioEngine } from '@/hooks/useAudioEngine'
 import { usePlayerState } from '@/hooks/usePlayerState'
 import { useMetronome } from '@/hooks/useMetronome'
-import { useRegionLoop } from '@/hooks/useRegionLoop'
+import { useSectionLoop } from '@/hooks/useSectionLoop'
 import { useMarkersCrud } from '@/hooks/useMarkersCrud'
-import { useRegionsCrud } from '@/hooks/useRegionsCrud'
+import { useSectionsCrud } from '@/hooks/useSectionsCrud'
 import MultiTrackWaveform from '@/components/Player/MultiTrackWaveform'
 import TransportBar from '@/components/Player/TransportBar'
 import SongSidebar from '@/components/Player/SongSidebar'
 import BpmTapModal from '@/components/Player/BpmTapModal'
 import MarkersSection from '@/components/Player/MarkersSection'
-import RegionsSection from '@/components/Player/RegionsSection'
+import SectionsPanel from '@/components/Player/SectionsPanel'
 import type { SongIndex, SongMeta } from '@/lib/types'
 import { PLAYBACK } from '@/lib/constants'
 import { saveLastSession } from '@/lib/lastSession'
@@ -27,7 +27,7 @@ interface UIState {
   sidebarOpen: boolean
   tapModalOpen: boolean
   markersSectionOpen: boolean
-  regionsSectionOpen: boolean
+  sectionsPanelOpen: boolean
 }
 
 type UIAction =
@@ -45,7 +45,7 @@ const initialUI: UIState = {
   sidebarOpen: false,
   tapModalOpen: false,
   markersSectionOpen: false,
-  regionsSectionOpen: false,
+  sectionsPanelOpen: false,
 }
 
 export default function PlayerClient({ meta, songs }: Props) {
@@ -54,9 +54,9 @@ export default function PlayerClient({ meta, songs }: Props) {
 
   const [ui, dispatch] = useReducer(uiReducer, initialUI)
 
-  const [activeRegionId, setActiveRegionId] = useState<string | null>(null)
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
   const [markersVisible, setMarkersVisible] = useState(true)
-  const [regionsVisible, setRegionsVisible] = useState(true)
+  const [sectionsVisible, setSectionsVisible] = useState(true)
   // El BPM vive solo en `persisted`: save() ya actualiza ese estado al toque
   // (solo debouncea la escritura a localStorage), así que duplicarlo en un
   // useState obligaba a hidratarlo con un setState dentro de un effect.
@@ -69,10 +69,8 @@ export default function PlayerClient({ meta, songs }: Props) {
     save,
   })
 
-  const regions = useRegionsCrud({
-    initialRegions: [],
-    getCurrentTime: () => engine.currentTime,
-    getDuration: () => engine.duration,
+  const sections = useSectionsCrud({
+    initialSections: [],
     save,
   })
 
@@ -84,18 +82,18 @@ export default function PlayerClient({ meta, songs }: Props) {
     play: engine.play,
   })
 
-  useRegionLoop({
+  useSectionLoop({
     engineState: engine.state,
     currentTime: engine.currentTime,
-    activeRegionId,
-    allRegions: regions.localRegions,
+    activeSectionId,
+    allSections: sections.localSections,
     seek: engine.seek,
   })
 
   useEffect(() => {
     if (engine.state !== 'ready') return
     if (persisted.localMarkers.length > 0) markers.hydrate(persisted.localMarkers)
-    if (persisted.localRegions.length > 0) regions.hydrate(persisted.localRegions)
+    if (persisted.localSections.length > 0) sections.hydrate(persisted.localSections)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine.state])
 
@@ -110,7 +108,7 @@ export default function PlayerClient({ meta, songs }: Props) {
     [engine]
   )
 
-  const handleSetActiveRegion = useCallback((id: string | null) => { setActiveRegionId(id) }, [])
+  const handleSetActiveSection = useCallback((id: string | null) => { setActiveSectionId(id) }, [])
 
   const handleSkip = useCallback(
     (delta: number) => { engine.seek(Math.max(0, Math.min(engine.currentTime + delta, engine.duration))) },
@@ -131,15 +129,14 @@ export default function PlayerClient({ meta, songs }: Props) {
     [engine, markers.localMarkers]
   )
 
-  const handleAddRegion = useCallback(() => {
-    regions.addRegion()
-    dispatch({ type: 'set', key: 'regionsSectionOpen', value: true })
-  }, [regions])
+  const handleAddSection = useCallback((start: number, end: number) => {
+    sections.addSection(start, end)
+  }, [sections])
 
-  const handleDeleteRegion = useCallback((index: number) => {
-    const deletedId = regions.deleteRegion(index)
-    if (activeRegionId === deletedId) handleSetActiveRegion(null)
-  }, [regions, activeRegionId, handleSetActiveRegion])
+  const handleDeleteSection = useCallback((index: number) => {
+    const deletedId = sections.deleteSection(index)
+    if (activeSectionId === deletedId) handleSetActiveSection(null)
+  }, [sections, activeSectionId, handleSetActiveSection])
 
   const handleConfirmBpm = useCallback((bpm: number) => {
     save({ localBpm: bpm })
@@ -193,8 +190,8 @@ export default function PlayerClient({ meta, songs }: Props) {
             songId={meta.id}
             tracks={meta.tracks}
             markers={markersVisible ? markers.localMarkers : []}
-            regions={regionsVisible ? regions.localRegions : []}
-            activeRegionId={activeRegionId}
+            sections={sectionsVisible ? sections.localSections : []}
+            activeSectionId={activeSectionId}
             currentTime={engine.currentTime}
             duration={engine.duration}
             volumes={engine.volumes}
@@ -202,28 +199,28 @@ export default function PlayerClient({ meta, songs }: Props) {
             onSeek={engine.seek}
             onVolumeChange={handleVolumeChange}
             onToggleMute={engine.toggleMute}
-            onSetActiveRegion={handleSetActiveRegion}
-            onRegionUpdate={regions.updateRegionBounds}
+            onSetActiveSection={handleSetActiveSection}
+            onSectionUpdate={sections.updateSectionBounds}
             engineState={engine.state}
             loadingProgress={engine.loadingProgress}
             peaks={engine.peaks}
           />
         </div>
 
-        <RegionsSection
-          isOpen={ui.regionsSectionOpen}
-          onToggle={() => dispatch({ type: 'toggle', key: 'regionsSectionOpen' })}
-          visible={regionsVisible}
-          onToggleVisible={() => setRegionsVisible((v) => !v)}
-          localRegions={regions.localRegions}
+        <SectionsPanel
+          isOpen={ui.sectionsPanelOpen}
+          onToggle={() => dispatch({ type: 'toggle', key: 'sectionsPanelOpen' })}
+          visible={sectionsVisible}
+          onToggleVisible={() => setSectionsVisible((v) => !v)}
+          localSections={sections.localSections}
           tracks={meta.tracks}
-          activeRegionId={activeRegionId}
+          activeSectionId={activeSectionId}
           currentTime={engine.currentTime}
           onSeek={engine.seek}
-          onSetActiveRegion={handleSetActiveRegion}
-          onAddRegion={handleAddRegion}
-          onEditRegion={regions.editRegion}
-          onDeleteRegion={handleDeleteRegion}
+          onSetActiveSection={handleSetActiveSection}
+          onAddSection={handleAddSection}
+          onEditSection={sections.editSection}
+          onDeleteSection={handleDeleteSection}
         />
 
         <MarkersSection
@@ -246,8 +243,8 @@ export default function PlayerClient({ meta, songs }: Props) {
             currentTime={engine.currentTime}
             duration={engine.duration}
             markers={markers.localMarkers}
-            regions={regions.localRegions}
-            activeRegionId={activeRegionId}
+            sections={sections.localSections}
+            activeSectionId={activeSectionId}
             countingIn={metronome.countingIn}
             countInBeat={metronome.countInBeat}
             onPlay={engine.play}
@@ -255,7 +252,7 @@ export default function PlayerClient({ meta, songs }: Props) {
             onSeek={engine.seek}
             onSkip={handleSkip}
             onSkipToMarker={handleSkipToMarker}
-            onSetActiveRegion={handleSetActiveRegion}
+            onSetActiveSection={handleSetActiveSection}
             onCountIn={metronome.handleCountIn}
             metronomeOn={metronome.metronomeOn}
             onToggleMetronome={metronome.toggleMetronome}

@@ -11,7 +11,7 @@ export interface Marker {
   trackIndex?: number  // undefined = track 0 (backwards compat con metadata.json)
 }
 
-export interface Region {
+export interface Section {
   id: string
   label: string
   start: number
