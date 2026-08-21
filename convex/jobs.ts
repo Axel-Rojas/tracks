@@ -64,7 +64,11 @@ export const start = mutation({
     // Espejo de STEM_MODES en lib/studio.ts.
     stems: v.union(v.literal(2), v.literal(4)),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, rawArgs) => {
+    // Mismo criterio que songs:seed: el slug identifica la canción sin importar
+    // mayúsculas, o se termina con dos documentos para la misma canción.
+    const args = { ...rawArgs, slug: rawArgs.slug.trim().toLowerCase() }
+
     const song = await ctx.db
       .query("songs")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))

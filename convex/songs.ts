@@ -1,15 +1,15 @@
-import { mutation, query } from "./_generated/server"
+import { internalMutation, mutation, query } from "./_generated/server"
 import { v } from "convex/values"
 import { closeJob } from "./jobs"
 
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Mn}/gu, "")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .trim()
-    .replace(/\s+/g, "-")
+/**
+ * El slug es la identidad de una canción, así que no puede depender de mayúsculas:
+ * "Crimenes Perfectos" y "Crimenes perfectos" tienen que ser la misma. El studio ya
+ * lo genera en minúsculas, pero scripts/add_song.py acepta un `--id` libre y las
+ * URLs las escribe cualquiera.
+ */
+function normalizeSlug(slug: string): string {
+  return slug.trim().toLowerCase()
 }
 
 const trackSchema = v.object({
@@ -40,7 +40,7 @@ export const getBySlug = query({
   handler: async (ctx, { slug }) => {
     const song = await ctx.db
       .query("songs")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .withIndex("by_slug", (q) => q.eq("slug", normalizeSlug(slug)))
       .unique()
     if (!song) return null
     return {
@@ -50,51 +50,6 @@ export const getBySlug = query({
       bpm: song.bpm,
       tracks: song.tracks,
     }
-  },
-})
-
-// Used by the public add-song interface. Generates slug from title; appends artist on collision.
-export const create = mutation({
-  args: {
-    title: v.string(),
-    artist: v.string(),
-    bpm: v.optional(v.number()),
-    isPublic: v.boolean(),
-    ownerId: v.optional(v.string()),
-    tracks: v.array(trackSchema),
-  },
-  handler: async (ctx, args) => {
-    const duplicate = await ctx.db
-      .query("songs")
-      .withIndex("by_title_artist", (q) =>
-        q.eq("title", args.title).eq("artist", args.artist)
-      )
-      .first()
-    if (duplicate) {
-      throw new Error(`"${args.title}" de "${args.artist}" ya existe`)
-    }
-
-    const base = slugify(args.title)
-    let slug = base
-    if (
-      await ctx.db
-        .query("songs")
-        .withIndex("by_slug", (q) => q.eq("slug", slug))
-        .unique()
-    ) {
-      slug = `${base}-${slugify(args.artist)}`
-      let suffix = 2
-      while (
-        await ctx.db
-          .query("songs")
-          .withIndex("by_slug", (q) => q.eq("slug", slug))
-          .unique()
-      ) {
-        slug = `${base}-${slugify(args.artist)}-${suffix++}`
-      }
-    }
-
-    return ctx.db.insert("songs", { ...args, slug })
   },
 })
 
@@ -130,7 +85,9 @@ export const seed = mutation({
     // Ausente en dev: scripts/add_song.py corre sin job.
     jobId: v.optional(v.string()),
   },
-  handler: async (ctx, { jobId, ...args }) => {
+  handler: async (ctx, { jobId, ...raw }) => {
+    const args = { ...raw, slug: normalizeSlug(raw.slug) }
+
     const existing = await ctx.db
       .query("songs")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
@@ -173,5 +130,36 @@ export const seed = mutation({
       trackCount: args.tracks.length,
       orphanFiles: unreferencedFiles(existing.tracks, args.tracks),
     }
+  },
+})
+
+/**
+ * Saca una canción y devuelve los archivos de R2 que dejó sin referencia, para que
+ * el que llama los borre. No alcanza con borrar el prefijo `songs/{slug}/`: dos
+ * canciones pueden compartir archivos ahí (es justo lo que pasó cuando una corrida
+ * de 4 pistas escribió sobre el `vocals.mp3` de una de 2 con otro slug).
+ *
+ * Interna a propósito: no hay auth todavía y esto borra datos.
+ */
+export const deleteBySlug = internalMutation({
+  args: { slug: v.string() },
+  handler: async (ctx, { slug }) => {
+    const song = await ctx.db
+      .query("songs")
+      .withIndex("by_slug", (q) => q.eq("slug", normalizeSlug(slug)))
+      .unique()
+
+    if (!song) return { deleted: false as const, orphanFiles: [] as string[] }
+
+    // Acotado: el catálogo es de decenas de canciones y esto corre a mano.
+    const all = await ctx.db.query("songs").take(1000)
+    const referencedElsewhere = all
+      .filter((s) => s._id !== song._id)
+      .flatMap((s) => s.tracks)
+
+    const orphanFiles = unreferencedFiles(song.tracks, referencedElsewhere)
+    await ctx.db.delete(song._id)
+
+    return { deleted: true as const, title: song.title, orphanFiles }
   },
 })

@@ -18,7 +18,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid form data' }, { status: 400 })
   }
 
-  const slug = (formData.get('id') as string | null)?.trim()
+  // Minúsculas siempre: el slug identifica la canción y no puede depender de cómo
+  // vino escrito el título, o "Crimenes Perfectos" y "Crimenes perfectos" terminan
+  // siendo dos canciones distintas.
+  const slug = (formData.get('id') as string | null)?.trim().toLowerCase()
   const title = (formData.get('title') as string | null)?.trim()
   const artist = (formData.get('artist') as string | null)?.trim()
   const bpmStr = (formData.get('bpm') as string | null)?.trim()
@@ -41,7 +44,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!/^[a-z0-9-]+$/.test(slug)) {
-    return NextResponse.json({ error: 'ID debe contener solo minúsculas, números y guiones' }, { status: 400 })
+    return NextResponse.json({ error: 'ID debe contener solo letras, números y guiones' }, { status: 400 })
   }
 
   await connection()
