@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 export const R2_BUCKET = 'tracks-app'
@@ -30,16 +30,4 @@ export async function getPresignedUploadUrl(key: string, contentType: string, ex
     new PutObjectCommand({ Bucket: R2_BUCKET, Key: key, ContentType: contentType }),
     { expiresIn },
   )
-}
-
-export async function getFromR2(key: string): Promise<Buffer | null> {
-  try {
-    const res = await r2.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }))
-    if (!res.Body) return null
-    return Buffer.from(await res.Body.transformToByteArray())
-  } catch (err: unknown) {
-    const code = (err as { Code?: string; name?: string })
-    if (code.Code === 'NoSuchKey' || code.name === 'NoSuchKey') return null
-    throw err
-  }
 }

@@ -42,9 +42,3 @@ export type SSEEvent =
   | { type: 'progress'; pct: number; text: string }
   | { type: 'done'; id: string }
   | { type: 'error'; message: string }
-
-export type JobStatus =
-  | { status: 'pending' }
-  | { status: 'running'; progress?: number; phase?: string }
-  | { status: 'done'; id: string }
-  | { status: 'error'; message: string }

@@ -1,12 +1,21 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery } from 'convex/react'
+import type { FunctionReturnType } from 'convex/server'
 import { api } from '@/convex/_generated/api'
 import { X, ArrowLeft, Music, ExternalLink, AudioLines } from 'lucide-react'
 import Link from 'next/link'
-import type { SSEEvent, JobStatus } from '@/lib/types'
-import { parseETA, inferPhase, STEM_OPTIONS, DEFAULT_STEM_MODE, type StemMode } from '@/lib/studio'
+import type { SSEEvent } from '@/lib/types'
+import {
+  parseETA,
+  inferPhase,
+  stemPlan,
+  blockedStemMessage,
+  STEM_OPTIONS,
+  DEFAULT_STEM_MODE,
+  type StemMode,
+} from '@/lib/studio'
 
 function slugify(s: string) {
   return s
@@ -29,12 +38,54 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputCls =
   'bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-green-500 w-full'
 
+type Job = FunctionReturnType<typeof api.jobs.listRecent>[number]
+
+const JOB_DOT: Record<Job['status'], string> = {
+  pending: 'bg-zinc-500',
+  running: 'bg-green-500 animate-pulse',
+  done: 'bg-green-400',
+  error: 'bg-red-500',
+}
+
+function JobRow({ job }: { job: Job }) {
+  return (
+    <div className="flex items-start gap-2.5 text-sm">
+      <span className={`h-2 w-2 mt-1.5 rounded-full flex-shrink-0 ${JOB_DOT[job.status]}`} />
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className="text-zinc-300 truncate">
+          {job.title} <span className="text-zinc-600">· {job.stems} pistas</span>
+        </span>
+        {job.status === 'done' ? (
+          <span className="text-xs text-green-400">
+            Lista ·{' '}
+            <Link href={`/songs/${job.slug}`} className="underline hover:text-green-300">
+              Abrir player
+            </Link>
+          </span>
+        ) : job.status === 'error' ? (
+          <span className="text-xs text-red-400">{job.message ?? 'Falló la separación.'}</span>
+        ) : (
+          <span className="text-xs text-zinc-500">
+            {job.status === 'pending' ? 'En cola...' : job.phase ?? 'Procesando...'}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function StudioClient({ isDev }: { isDev: boolean }) {
   const songs = useQuery(api.songs.listPublic)
   const artists = [...new Set((songs ?? []).map((s) => s.artist))].sort()
 
   const songInputRef = useRef<HTMLInputElement>(null)
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Reemplaza al polling contra /api/studio/status: el estado de cada corrida vive
+  // en Convex, así que se sigue viendo aunque se cierre la pestaña o se entre desde
+  // otro dispositivo.
+  const jobs = useQuery(api.jobs.listRecent) ?? []
+  const activeJobs = jobs.filter((j) => j.status === 'pending' || j.status === 'running')
+  const finishedJobs = jobs.filter((j) => j.status === 'done' || j.status === 'error').slice(0, 3)
 
   const [title, setTitle] = useState('')
   const [artist, setArtist] = useState('')
@@ -50,24 +101,30 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
   const [phase, setPhase] = useState('')
   const [progress, setProgress] = useState<number | null>(null)
   const [lastLog, setLastLog] = useState('')
-  const [result, setResult] = useState<{ ok: boolean; message: string; id?: string } | null>(null)
+  const [result, setResult] = useState<
+    { ok: boolean; message: string; id?: string; replaced?: boolean } | null
+  >(null)
 
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current)
-    }
-  }, [])
+  // El ID sale del título, así que volver a subir la misma canción cae siempre en el
+  // slug que ya existe. Convex solo reemplaza si esta corrida trae más pistas que las
+  // guardadas; el resto se avisa acá para no gastar una separación entera de gusto.
+  const existingTracks = songs?.find((s) => s.id === id)?.trackCount
+  const plan = stemPlan(existingTracks, stems)
+  const blockedMsg =
+    plan === 'blocked' && existingTracks !== undefined
+      ? blockedStemMessage(existingTracks, stems)
+      : null
+
+  // jobs:start rechaza dos corridas sobre el mismo slug; esto es solo el aviso
+  // temprano para no hacer subir un MP3 entero antes del 409.
+  const busyMsg = activeJobs.some((j) => j.slug === id)
+    ? `Ya hay una corrida procesando "${id}". Esperá a que termine.`
+    : null
+  const formError = blockedMsg ?? busyMsg
 
   function handleTitleChange(value: string) {
     setTitle(value)
     if (!id || id === slugify(title)) setId(slugify(value))
-  }
-
-  function stopPolling() {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current)
-      pollingRef.current = null
-    }
   }
 
   function resetForm() {
@@ -86,6 +143,10 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
       setResult({ ok: false, message: 'Completá título, artista e ID.' })
       return
     }
+    if (formError) {
+      setResult({ ok: false, message: formError })
+      return
+    }
     if (youtubeMode && !youtubeUrl.trim()) {
       setResult({ ok: false, message: 'Pegá una URL de YouTube.' })
       return
@@ -100,7 +161,6 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
     setProgress(null)
     setLastLog('')
     setResult(null)
-    stopPolling()
 
     // In prod with an MP3, upload directly to R2 via presigned URL to bypass Vercel's 4.5MB limit
     let audioKey: string | undefined
@@ -199,7 +259,7 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
               }
             }
           } else if (ev.type === 'done') {
-            setResult({ ok: true, message: '', id: ev.id })
+            setResult({ ok: true, message: '', id: ev.id, replaced: plan === 'replace' })
             setSaving(false)
             resetForm()
           } else if (ev.type === 'error') {
@@ -211,7 +271,7 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
       return
     }
 
-    // ── Polling path (prod) ───────────────────────────────────────────────
+    // ── Prod: la corrida sigue sola ───────────────────────────────────────
     if (!res.ok) {
       const data = (await res.json()) as { error?: string }
       setResult({ ok: false, message: data.error ?? 'Error desconocido' })
@@ -219,38 +279,11 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
       return
     }
 
-    const { jobId } = (await res.json()) as { jobId: string }
-    setPhase('Esperando inicio en Modal...')
-    setLastLog('Cold start puede tardar ~30s la primera vez')
-
-    pollingRef.current = setInterval(async () => {
-      try {
-        const statusRes = await fetch(`/api/studio/status?jobId=${jobId}`)
-        if (!statusRes.ok) return
-        const status = (await statusRes.json()) as JobStatus
-
-        if (status.status === 'pending') {
-          setPhase('Esperando inicio en Modal...')
-        } else if (status.status === 'running') {
-          setPhase(status.phase ?? 'Procesando...')
-          if (status.progress !== undefined) {
-            setProgress(status.progress)
-            setLastLog('')
-          }
-        } else if (status.status === 'done') {
-          stopPolling()
-          setResult({ ok: true, message: '', id: status.id })
-          setSaving(false)
-          resetForm()
-        } else if (status.status === 'error') {
-          stopPolling()
-          setResult({ ok: false, message: status.message })
-          setSaving(false)
-        }
-      } catch {
-        // ignore transient polling errors
-      }
-    }, 10000)
+    // El job ya está en Convex (lo creó /api/studio antes de llamar a Modal), así
+    // que a partir de acá lo muestra la live query. El form se libera enseguida:
+    // se puede encolar otra canción o cerrar la pestaña sin perder nada.
+    setSaving(false)
+    resetForm()
   }
 
   return (
@@ -353,6 +386,14 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
               Separar tarda lo mismo, pero el player descarga y decodifica el doble de audio al abrir la canción.
             </p>
           )}
+          {formError ? (
+            <p className="text-xs text-red-400">{formError}</p>
+          ) : plan === 'replace' && existingTracks !== undefined ? (
+            <p className="text-xs text-amber-500/80">
+              Ese ID ya existe con {existingTracks} pistas: se reemplazan por {stems} y las
+              viejas se borran de R2.
+            </p>
+          ) : null}
 
           {youtubeMode ? (
             <input
@@ -403,7 +444,7 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
         <div className="flex flex-col gap-3">
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || formError !== null}
             className="h-12 rounded-xl bg-green-500 hover:bg-green-400 active:bg-green-600 disabled:opacity-50 text-black font-semibold text-sm transition-colors"
           >
             {saving ? 'Procesando...' : 'Procesar y guardar'}
@@ -442,7 +483,9 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
             >
               {result.ok ? (
                 <span>
-                  Canción guardada en R2 y Convex.{' '}
+                  {result.replaced
+                    ? 'Pistas reemplazadas en R2 y Convex.'
+                    : 'Canción guardada en R2 y Convex.'}{' '}
                   <Link href="/" className="underline hover:text-green-200">Ver lista</Link>{' '}
                   ·{' '}
                   <Link href={`/songs/${result.id}`} className="underline hover:text-green-200">Abrir player</Link>
@@ -454,6 +497,19 @@ export default function StudioClient({ isDev }: { isDev: boolean }) {
           )}
         </div>
       </form>
+
+      {(activeJobs.length > 0 || finishedJobs.length > 0) && (
+        <section className="flex flex-col gap-3 p-4 mt-6 bg-zinc-800/50 rounded-xl border border-zinc-700">
+          <h2 className="text-sm font-semibold text-zinc-300">Corridas</h2>
+          {activeJobs.map((job) => <JobRow key={job.jobId} job={job} />)}
+          {finishedJobs.map((job) => <JobRow key={job.jobId} job={job} />)}
+          {activeJobs.length > 0 && (
+            <p className="text-xs text-zinc-500">
+              Siguen solas: podés cerrar esta pestaña y volver cuando quieras.
+            </p>
+          )}
+        </section>
+      )}
     </main>
   )
 }

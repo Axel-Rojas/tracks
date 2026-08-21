@@ -27,7 +27,9 @@ Song metadata lives in Convex; audio files live in Cloudflare R2. Deployed to Ve
 
 - Upload a raw MP3 and the audio is separated into stems using Demucs. Pasting a YouTube URL is development-only: from Modal's datacenter IP the download is blocked, and the session cookies that would unblock it live in the local Firefox profile
 - Stem count selector: 2 stems (Voz, Instrumental) or 4 stems (Batería, Bajo, Otros, Voz). Separation takes the same time either way — htdemucs always computes four sources and `--two-stems` merges them at the end — but 4 stems doubles the audio the player downloads and decodes
-- Real-time processing progress: Server-Sent Events in development, R2 status-file polling in production (phase labels, progress bar, ETA)
+- Re-processing an existing song only replaces it when the run brings **more** stems than the stored ones (2 → 4). Same or fewer stems is rejected before Demucs runs — the studio greys out the button and `/api/studio` answers 409 — so a finer separation is never clobbered. On a replace, the superseded stems are deleted from R2
+- Only one run at a time per song id. The second submit is rejected by `jobs:start` before Demucs runs, so a double submit no longer burns two GPUs to publish one song
+- Processing progress: Server-Sent Events in development (phase labels, progress bar, ETA). In production the run is tracked by a `jobs` row in Convex that the studio reads as a live query — closing the tab does not affect it, and the run is visible from any device
 - Uploads each stem to `songs/{slug}/` in R2 and registers the song in Convex with one track per stem
 
 **PWA**
@@ -51,7 +53,6 @@ app/
   api/studio/
     route.ts              POST: dev spawns add_song.py and streams SSE; prod calls the Modal webhook
     presign/route.ts      Presigned R2 PUT, so prod uploads bypass Vercel's 4.5MB body limit
-    status/route.ts       Job status polling for the prod path
   sw-register.tsx         Client component that registers /sw.js
 
 components/SongList/
@@ -87,11 +88,13 @@ lib/
   r2.ts                   S3 client pointed at R2
 
 convex/
-  schema.ts               songs table and its indexes
+  schema.ts               songs and jobs tables with their indexes
   songs.ts                listPublic, getBySlug, seed
+  jobs.ts                 start, update, listRecent, sweepStale (prod run tracking)
+  crons.ts                Sweeps stale runs every 5 minutes
 
 modal_worker/
-  app.py                  GPU worker: Demucs separation, R2 upload, Convex seed, status webhook
+  app.py                  GPU worker: Demucs separation, R2 upload, Convex seed and job updates
   requirements.txt        Local deps needed to deploy the worker (not the remote image)
 
 scripts/
@@ -132,7 +135,9 @@ WaveSurfer's regions plugin is what draws sections and markers on the waveform, 
 
 Navigate to `/studio`, upload the original MP3, pick the stem count, fill in the metadata, and submit.
 
-In development the server saves the file temporarily and runs `scripts/add_song.py`, streaming progress back to the browser via SSE. In production the browser uploads the MP3 straight to R2 with a presigned URL, the API hands the job to the Modal worker, and the client polls `/api/studio/status`. Either way processing takes roughly 2-5 minutes depending on song length.
+In development the server saves the file temporarily and runs `scripts/add_song.py`, streaming progress back to the browser via SSE. Either way processing takes roughly 2-5 minutes depending on song length.
+
+In production the browser uploads the MP3 straight to R2 with a presigned URL and `/api/studio` records a run in Convex (`jobs:start`) before handing it to the Modal worker. The worker reports its milestones with `jobs:update`, and `songs:seed` closes the run in the same transaction that decides whether the tracks were kept. Nothing about that chain depends on the browser: the studio reads the runs as a live query, so you can close the tab, switch devices, and come back to the result. A run whose container dies without reporting is closed by the `sweepStale` cron 13 minutes in — Modal's own timeout is 600s.
 
 Pasting a YouTube URL only works in development; in production the API rejects it and asks for the MP3.
 
@@ -145,7 +150,7 @@ python scripts/add_song.py --youtube-url "https://youtu.be/..." --title "Title" 
 python scripts/add_song.py path/to/song.mp3 --title "Title" --artist "Artist" --stems 4
 ```
 
-For MP3 input the script converts to WAV first (required for Python 3.13+ torchaudio compatibility). For YouTube input the audio is downloaded directly as WAV via yt-dlp, skipping conversion. YouTube downloads reuse the logged-in session from Firefox by default (`--cookies-from-browser firefox`); pass `--cookies-from-browser none` to download anonymously, or another browser name to read cookies from it instead. Demucs runs with `--two-stems=vocals` by default; `--stems 4` drops that flag and keeps the four sources (`drums`, `bass`, `other`, `vocals`). Each stem is uploaded to `songs/{id}/` in R2 and the song is registered in Convex with one track per stem. The temporary WAV is discarded automatically.
+For MP3 input the script converts to WAV first (required for Python 3.13+ torchaudio compatibility). For YouTube input the audio is downloaded directly as WAV via yt-dlp, skipping conversion. YouTube downloads reuse the logged-in session from Firefox by default (`--cookies-from-browser firefox`); pass `--cookies-from-browser none` to download anonymously, or another browser name to read cookies from it instead. Demucs runs with `--two-stems=vocals` by default; `--stems 4` drops that flag and keeps the four sources (`drums`, `bass`, `other`, `vocals`). Each stem is uploaded to `songs/{id}/` in R2 and the song is registered in Convex with one track per stem. The temporary WAV is discarded automatically. Re-running against an existing `--id` replaces its tracks only when this run produces more stems than the stored ones; otherwise the script deletes the stems it just uploaded and exits with an error.
 
 ### Prerequisites for song processing
 

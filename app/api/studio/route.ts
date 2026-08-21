@@ -1,12 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, connection } from 'next/server'
 import { revalidatePath } from 'next/cache'
+import { fetchMutation, fetchQuery } from 'convex/nextjs'
 import { writeFile, rm } from 'fs/promises'
 import { spawn } from 'child_process'
 import path from 'path'
 import os from 'os'
 import crypto from 'crypto'
+import { api } from '@/convex/_generated/api'
 import type { SSEEvent } from '@/lib/types'
-import { parseStemMode } from '@/lib/studio'
+import { parseStemMode, stemPlan, blockedStemMessage } from '@/lib/studio'
 
 export async function POST(req: NextRequest) {
   let formData: FormData
@@ -42,8 +44,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'ID debe contener solo minúsculas, números y guiones' }, { status: 400 })
   }
 
+  await connection()
+
   // ── Dev path: spawn local Python script, stream SSE ──────────────────────
   if (process.env.NODE_ENV === 'development') {
+    // La separación solo se reemplaza hacia arriba (ver stemPlan). Sin este corte
+    // la corrida de Demucs se hace igual y songs:seed la descarta al final, así que
+    // el usuario espera varios minutos para que no cambie nada. En prod este mismo
+    // corte lo hace jobs:start, que además rechaza dos corridas sobre un slug.
+    let existingTracks: number | undefined
+    try {
+      const existing = await fetchQuery(api.songs.getBySlug, { slug })
+      existingTracks = existing?.tracks.length
+    } catch (err) {
+      console.error('Convex getBySlug error:', err)
+      return NextResponse.json({ error: 'No se pudo consultar Convex' }, { status: 502 })
+    }
+
+    if (existingTracks !== undefined && stemPlan(existingTracks, stems) === 'blocked') {
+      return NextResponse.json({ error: blockedStemMessage(existingTracks, stems) }, { status: 409 })
+    }
+
     let songBuffer: Buffer | null = null
 
     try {
@@ -91,6 +112,10 @@ export async function POST(req: NextRequest) {
         const procArgs = tmpPath ? [...scriptArgs, tmpPath] : scriptArgs
         const proc = spawn('python', procArgs, { cwd: process.cwd() })
 
+        // add_song.py avisa por qué se cortó con una línea "ERROR: ..." (por ejemplo
+        // cuando Convex descarta la corrida). Sin esto el front solo dice "Demucs falló".
+        let lastError = ''
+
         const handleChunk = (data: Buffer) => {
           const parts = data.toString('utf-8').split(/[\r\n]/).filter((s) => s.trim())
           for (const part of parts) {
@@ -98,6 +123,7 @@ export async function POST(req: NextRequest) {
             if (pctMatch) {
               send({ type: 'progress', pct: parseInt(pctMatch[1]), text: part.trim() })
             } else {
+              if (part.trimStart().startsWith('ERROR')) lastError = part.trim()
               send({ type: 'log', text: part.trim() })
             }
           }
@@ -110,7 +136,7 @@ export async function POST(req: NextRequest) {
           if (tmpPath) await rm(tmpPath, { force: true })
 
           if (code !== 0) {
-            send({ type: 'error', message: 'Demucs falló. Revisá la terminal para más detalles.' })
+            send({ type: 'error', message: lastError || 'Demucs falló. Revisá la terminal para más detalles.' })
             controller.close()
             return
           }
@@ -153,6 +179,22 @@ export async function POST(req: NextRequest) {
 
   const audioUrl = audioKey ? `${process.env.NEXT_PUBLIC_R2_URL}/${audioKey}` : ''
 
+  // El job se crea antes de tocar Modal. Es el único punto que decide si una corrida
+  // arranca (regla de stems + una sola activa por slug) y es lo que después deja
+  // seguir el progreso sin la pestaña abierta: a partir de acá el estado vive en
+  // Convex, no en el cliente.
+  try {
+    const started = await fetchMutation(api.jobs.start, {
+      jobId, slug, title, artist, stems, ...(bpm !== undefined ? { bpm } : {}),
+    })
+    if (!started.ok) {
+      return NextResponse.json({ error: started.message }, { status: 409 })
+    }
+  } catch (err) {
+    console.error('Convex jobs:start error:', err)
+    return NextResponse.json({ error: 'No se pudo registrar la corrida en Convex' }, { status: 502 })
+  }
+
   try {
     const modalRes = await fetch(process.env.MODAL_WEBHOOK_URL, {
       method: 'POST',
@@ -162,12 +204,26 @@ export async function POST(req: NextRequest) {
 
     if (!modalRes.ok) {
       console.error('Modal error:', await modalRes.text())
+      await failJob(jobId, 'Modal rechazó la corrida.')
       return NextResponse.json({ error: 'Error al iniciar job en Modal' }, { status: 502 })
     }
   } catch (err) {
     console.error('Modal fetch error:', err)
+    await failJob(jobId, 'No se pudo conectar con Modal.')
     return NextResponse.json({ error: 'No se pudo conectar con Modal' }, { status: 502 })
   }
 
   return NextResponse.json({ jobId })
+}
+
+/**
+ * Si Modal no toma la corrida hay que cerrar el job a mano: sin esto queda
+ * "pending" en el studio hasta que lo barra el cron, trece minutos después.
+ */
+async function failJob(jobId: string, message: string) {
+  try {
+    await fetchMutation(api.jobs.update, { jobId, status: 'error', message })
+  } catch (err) {
+    console.error('No se pudo cerrar el job:', err)
+  }
 }

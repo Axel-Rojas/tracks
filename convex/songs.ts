@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server"
 import { v } from "convex/values"
+import { closeJob } from "./jobs"
 
 function slugify(text: string): string {
   return text
@@ -97,8 +98,26 @@ export const create = mutation({
   },
 })
 
-// One-time migration helper — accepts explicit slug to preserve existing IDs.
-// Idempotent: skips if slug already exists.
+/** Files in `from` that no track in `keep` points at — they are orphans in R2. */
+function unreferencedFiles(from: { file: string }[], keep: { file: string }[]): string[] {
+  const kept = new Set(keep.map((t) => t.file))
+  return from.map((t) => t.file).filter((f) => !kept.has(f))
+}
+
+// Entry point for the Modal worker and scripts/add_song.py — accepts an explicit
+// slug, which is also what let it double as the one-time migration helper.
+//
+// Idempotent per slug with one exception: a run that brings MORE tracks than the
+// stored ones (2 -> 4) replaces them. Never the other way around — re-uploading
+// with fewer stems must not clobber a finer separation.
+//
+// Returns the files left unreferenced so the caller can delete them from R2: the
+// old ones when replacing, the just-uploaded ones when the run is discarded.
+//
+// Cuando viene `jobId` cierra el job en la misma transacción que decide el
+// veredicto. Es a propósito: si el worker mandara el "done" por su cuenta habría
+// una ventana donde la canción ya está publicada y el job sigue colgado porque el
+// container murió entre una llamada y la otra.
 export const seed = mutation({
   args: {
     title: v.string(),
@@ -108,13 +127,51 @@ export const seed = mutation({
     isPublic: v.boolean(),
     ownerId: v.optional(v.string()),
     tracks: v.array(trackSchema),
+    // Ausente en dev: scripts/add_song.py corre sin job.
+    jobId: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, { jobId, ...args }) => {
     const existing = await ctx.db
       .query("songs")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
       .unique()
-    if (existing) return null
-    return ctx.db.insert("songs", args)
+
+    if (!existing) {
+      await ctx.db.insert("songs", { ...args })
+      await closeJob(ctx, jobId, "done")
+      return {
+        action: "created" as const,
+        trackCount: args.tracks.length,
+        orphanFiles: [] as string[],
+      }
+    }
+
+    if (args.tracks.length <= existing.tracks.length) {
+      await closeJob(
+        ctx,
+        jobId,
+        "error",
+        `No se reemplazó nada: "${args.slug}" ya tiene ${existing.tracks.length} pistas ` +
+          `y esta corrida traía ${args.tracks.length}.`,
+      )
+      return {
+        action: "skipped" as const,
+        trackCount: existing.tracks.length,
+        orphanFiles: unreferencedFiles(args.tracks, existing.tracks),
+      }
+    }
+
+    // Only the tracks (and bpm when given) are touched: title/artist/isPublic/ownerId
+    // belong to the stored document and may have been edited after it was created.
+    await ctx.db.patch(existing._id, {
+      tracks: args.tracks,
+      ...(args.bpm !== undefined ? { bpm: args.bpm } : {}),
+    })
+    await closeJob(ctx, jobId, "done")
+    return {
+      action: "replaced" as const,
+      trackCount: args.tracks.length,
+      orphanFiles: unreferencedFiles(existing.tracks, args.tracks),
+    }
   },
 })

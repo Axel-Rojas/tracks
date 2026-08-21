@@ -286,16 +286,34 @@ def run_demucs(input_file: Path, out_dir: Path, jobs: int = 1, stems: int = 2) -
     return find_stem_dir(out_dir, wav_file.stem)
 
 
-def upload_to_r2(local_path: Path, key: str):
+def r2_client():
     import boto3
     account_id = os.environ['CF_ACCOUNT_ID']
-    s3 = boto3.client(
+    return boto3.client(
         's3',
         region_name='auto',
         endpoint_url=f'https://{account_id}.r2.cloudflarestorage.com',
         aws_access_key_id=os.environ['CF_R2_ACCESS_KEY_ID'],
         aws_secret_access_key=os.environ['CF_R2_SECRET_ACCESS_KEY'],
     )
+
+
+def delete_from_r2(keys: list):
+    """Borra las pistas que ya no referencia ninguna canción. Best effort: si falla
+    un borrado queda basura en el bucket, pero la canción ya quedó bien guardada."""
+    if not keys:
+        return
+    s3 = r2_client()
+    for key in keys:
+        try:
+            s3.delete_object(Bucket=R2_BUCKET, Key=key)
+            print(f"  ×  Borrado {key}")
+        except Exception as e:
+            print(f"  !  No se pudo borrar {key}: {e}")
+
+
+def upload_to_r2(local_path: Path, key: str):
+    s3 = r2_client()
     print(f"  ↑  Subiendo {key}...")
     s3.upload_file(
         str(local_path), R2_BUCKET, key,
@@ -307,7 +325,13 @@ def upload_to_r2(local_path: Path, key: str):
     print(f"  ✓  {key}")
 
 
-def register_in_convex(song_id: str, title: str, artist: str, bpm: int | None, tracks: list):
+def register_in_convex(song_id: str, title: str, artist: str, bpm: int | None, tracks: list) -> dict:
+    """Registra la canción y devuelve el veredicto de Convex.
+
+    {"action": "created" | "replaced" | "skipped", "trackCount": int, "orphanFiles": [...]}.
+    Convex reemplaza las pistas solo si esta corrida trae más que las guardadas, así
+    que "skipped" quiere decir que las que acabamos de subir no las usa nadie.
+    """
     convex_url = os.environ['NEXT_PUBLIC_CONVEX_URL'].rstrip('/')
     args = {
         "slug": song_id,
@@ -333,6 +357,10 @@ def register_in_convex(song_id: str, title: str, artist: str, bpm: int | None, t
                 print(f"ERROR Convex: {result.get('errorMessage', result)}")
                 sys.exit(1)
             print(f"  ✓  Registrada en Convex con slug: {song_id}")
+            # Las funciones de Convex se deployan aparte del script: con la versión
+            # vieja de songs:seed vuelve un id o null en lugar del veredicto.
+            value = result.get("value")
+            return value if isinstance(value, dict) else {}
     except urllib.error.HTTPError as e:
         body_err = e.read().decode(errors='replace')
         print(f"ERROR al registrar en Convex: {e.code} {body_err}")
@@ -405,9 +433,21 @@ def main():
     ]
 
     print("\n>> Registrando en Convex...")
-    register_in_convex(song_id, args.title, args.artist, args.bpm, tracks)
+    seeded = register_in_convex(song_id, args.title, args.artist, args.bpm, tracks)
 
-    print(f"\n✓ Canción lista:")
+    # Convex decide qué pistas quedan: las que ya no referencia se borran de R2. Son
+    # las viejas cuando reemplazó (2 → 4) y las que acabamos de subir cuando descartó
+    # la corrida por tener igual o menos pistas que las guardadas.
+    delete_from_r2(seeded.get("orphanFiles") or [])
+
+    if seeded.get("action") == "skipped":
+        # El studio corta estos casos antes de arrancar; esto cubre correr el script
+        # a mano. Sale con error para que nada reporte un "listo" que no pasó.
+        print(f"\nERROR: no se reemplazó nada. '{song_id}' ya tiene "
+              f"{seeded.get('trackCount')} pistas y esta corrida traía {len(layout)}.")
+        sys.exit(1)
+
+    print(f"\n✓ Canción {'reemplazada' if seeded.get('action') == 'replaced' else 'lista'}:")
     print(f"  Título:  {args.title} — {args.artist}")
     print(f"  Pistas:  {', '.join(label for _, _, label in layout)}")
     print(f"  R2 key:  songs/{song_id}/")
